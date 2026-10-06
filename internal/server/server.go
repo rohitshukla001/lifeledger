@@ -1,4 +1,3 @@
-// Package server holds the LifeLedger HTTP server.
 package server
 
 import (
@@ -10,17 +9,15 @@ import (
 	"net/http"
 	"time"
 
-	"lifeledger/internal/version"
+	"github.com/rohitshukla001/lifeledger/internal/version"
 )
 
-// Server wraps http.Server with the LifeLedger routes.
 type Server struct {
 	log     *slog.Logger
 	http    *http.Server
 	started time.Time
 }
 
-// New makes a Server that listens on addr.
 func New(addr string, log *slog.Logger) *Server {
 	s := &Server{log: log, started: time.Now()}
 	s.http = &http.Server{
@@ -28,21 +25,18 @@ func New(addr string, log *slog.Logger) *Server {
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		// Chat streams in later tasks need a long write timeout.
-		WriteTimeout: 5 * time.Minute,
-		IdleTimeout:  2 * time.Minute,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
 	}
 	return s
 }
 
-// Handler returns the root HTTP handler with all routes.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	return s.logRequests(mux)
 }
 
-// Run serves HTTP until ctx is done, then shuts down gracefully.
 func (s *Server) Run(ctx context.Context) error {
 	ln, err := net.Listen("tcp", s.http.Addr)
 	if err != nil {
@@ -51,7 +45,6 @@ func (s *Server) Run(ctx context.Context) error {
 	return s.Serve(ctx, ln)
 }
 
-// Serve serves HTTP on ln until ctx is done. Tests use it with a random port.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	errCh := make(chan error, 1)
 	go func() {
@@ -100,7 +93,6 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// statusRecorder keeps the response status for the request log.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -109,13 +101,6 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
-}
-
-// Flush lets streaming handlers flush through the recorder.
-func (r *statusRecorder) Flush() {
-	if f, ok := r.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
 }
 
 func (s *Server) logRequests(next http.Handler) http.Handler {

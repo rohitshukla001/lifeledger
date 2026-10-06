@@ -26,6 +26,13 @@ func TestRunHelp(t *testing.T) {
 	}
 }
 
+func TestRunHelpFlag(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := run([]string{"-h"}, &out, &errOut); code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+}
+
 func TestRunNoCommand(t *testing.T) {
 	var out, errOut bytes.Buffer
 	if code := run(nil, &out, &errOut); code != 2 {

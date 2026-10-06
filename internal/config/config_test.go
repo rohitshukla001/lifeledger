@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +17,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Addr != ":8080" || cfg.Env != EnvDev || cfg.LogLevel != "info" {
+	if cfg.Addr != ":8080" || cfg.Env != EnvDev || cfg.LogLevel != slog.LevelInfo {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 }
@@ -70,7 +71,6 @@ LL_TEST_KEEP=from-file
 		t.Fatal(err)
 	}
 
-	// Register cleanup for every key the file sets.
 	for _, k := range []string{"LIFELEDGER_ENV", "LIFELEDGER_LOG_LEVEL", "LL_TEST_INLINE", "LL_TEST_SINGLE"} {
 		t.Setenv(k, "")
 		os.Unsetenv(k)
@@ -81,7 +81,7 @@ LL_TEST_KEEP=from-file
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Env != EnvProd || cfg.LogLevel != "debug" {
+	if cfg.Env != EnvProd || cfg.LogLevel != slog.LevelDebug {
 		t.Fatalf("file values not applied: %+v", cfg)
 	}
 	if got := os.Getenv("LL_TEST_INLINE"); got != "value" {

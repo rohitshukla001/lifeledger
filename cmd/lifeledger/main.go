@@ -1,13 +1,8 @@
-// Command lifeledger is the LifeLedger personal life-admin agent.
-//
-// Usage:
-//
-//	lifeledger serve     Start the HTTP server.
-//	lifeledger version   Print the build version.
 package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -16,9 +11,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"lifeledger/internal/config"
-	"lifeledger/internal/server"
-	"lifeledger/internal/version"
+	"github.com/rohitshukla001/lifeledger/internal/config"
+	"github.com/rohitshukla001/lifeledger/internal/server"
+	"github.com/rohitshukla001/lifeledger/internal/version"
 )
 
 const usage = `LifeLedger: a private life-admin agent.
@@ -47,6 +42,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
 		return 2
 	}
 
@@ -55,12 +53,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "version":
 		fmt.Fprintln(stdout, "lifeledger", version.String())
 		return 0
-	case "", "help", "-h", "--help":
+	case "help":
 		fs.Usage()
-		if cmd == "" {
-			return 2
-		}
 		return 0
+	case "":
+		fs.Usage()
+		return 2
 	}
 
 	cfg, err := config.Load(*envFile)
@@ -68,11 +66,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "config error:", err)
 		return 1
 	}
-	log, err := newLogger(cfg, stderr)
-	if err != nil {
-		fmt.Fprintln(stderr, "config error:", err)
-		return 1
-	}
+	log := newLogger(cfg, stderr)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -92,14 +86,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func newLogger(cfg config.Config, w io.Writer) (*slog.Logger, error) {
-	level, err := cfg.SlogLevel()
-	if err != nil {
-		return nil, err
-	}
-	opts := &slog.HandlerOptions{Level: level}
+func newLogger(cfg config.Config, w io.Writer) *slog.Logger {
+	opts := &slog.HandlerOptions{Level: cfg.LogLevel}
 	if cfg.Env == config.EnvProd {
-		return slog.New(slog.NewJSONHandler(w, opts)), nil
+		return slog.New(slog.NewJSONHandler(w, opts))
 	}
-	return slog.New(slog.NewTextHandler(w, opts)), nil
+	return slog.New(slog.NewTextHandler(w, opts))
 }
