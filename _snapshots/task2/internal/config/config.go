@@ -20,7 +20,6 @@ type Config struct {
 	Addr     string
 	Env      string
 	LogLevel slog.Level
-	DBPath   string
 
 	NebiusAPIKey   string
 	NebiusBaseURL  string
@@ -40,7 +39,6 @@ func Load(envFile string) (Config, error) {
 	cfg := Config{
 		Addr:          getenv("LIFELEDGER_ADDR", ":8080"),
 		Env:           strings.ToLower(getenv("LIFELEDGER_ENV", EnvDev)),
-		DBPath:        getenv("LIFELEDGER_DB_PATH", "data/lifeledger.db"),
 		NebiusAPIKey:  os.Getenv("NEBIUS_API_KEY"),
 		NebiusBaseURL: getenv("NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1/"),
 		ModelNano:     getenv("LIFELEDGER_MODEL_NANO", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"),

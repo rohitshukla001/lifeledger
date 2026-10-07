@@ -13,7 +13,6 @@ import (
 
 	"github.com/rohitshukla001/lifeledger/internal/config"
 	"github.com/rohitshukla001/lifeledger/internal/server"
-	"github.com/rohitshukla001/lifeledger/internal/store"
 	"github.com/rohitshukla001/lifeledger/internal/version"
 )
 
@@ -23,11 +22,9 @@ Usage:
   lifeledger [-env-file PATH] <command>
 
 Commands:
-  serve                 Start the HTTP server.
-  models                List Token Factory models and check the configured ones.
-  ask [-tier T] PROMPT  Send one prompt to Nemotron (T is nano, super, or ultra).
-  version               Print the build version.
-  help                  Show this help.
+  serve     Start the HTTP server.
+  version   Print the build version.
+  help      Show this help.
 
 Flags:
 `
@@ -69,50 +66,24 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "config error:", err)
 		return 1
 	}
-	a := &app{cfg: cfg, log: newLogger(cfg, stderr), stdout: stdout, stderr: stderr}
+	log := newLogger(cfg, stderr)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	switch cmd {
 	case "serve":
-		return a.serve(ctx)
-	case "models":
-		return a.models(ctx)
-	case "ask":
-		return a.ask(ctx, fs.Args()[1:])
+		log.Info("starting lifeledger", "version", version.String(), "env", cfg.Env)
+		if err := server.New(cfg.Addr, log).Run(ctx); err != nil {
+			log.Error("server stopped with error", "err", err)
+			return 1
+		}
+		return 0
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", cmd)
 		fs.Usage()
 		return 2
 	}
-}
-
-type app struct {
-	cfg    config.Config
-	log    *slog.Logger
-	stdout io.Writer
-	stderr io.Writer
-}
-
-func (a *app) serve(ctx context.Context) int {
-	a.log.Info("starting lifeledger", "version", version.String(), "env", a.cfg.Env)
-
-	db, err := store.Open(ctx, a.cfg.DBPath)
-	if err != nil {
-		a.log.Error("cannot open database", "path", a.cfg.DBPath, "err", err)
-		return 1
-	}
-	defer db.Close()
-	if v, err := db.SchemaVersion(ctx); err == nil {
-		a.log.Info("database ready", "path", a.cfg.DBPath, "schema_version", v)
-	}
-
-	if err := server.New(a.cfg.Addr, a.log, db).Run(ctx); err != nil {
-		a.log.Error("server stopped with error", "err", err)
-		return 1
-	}
-	return 0
 }
 
 func newLogger(cfg config.Config, w io.Writer) *slog.Logger {

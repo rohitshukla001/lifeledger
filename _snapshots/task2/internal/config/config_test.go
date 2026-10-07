@@ -12,13 +12,12 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("LIFELEDGER_ENV", "")
 	t.Setenv("LIFELEDGER_LOG_LEVEL", "")
 	t.Setenv("PORT", "")
-	t.Setenv("LIFELEDGER_DB_PATH", "")
 
 	cfg, err := Load("")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Addr != ":8080" || cfg.Env != EnvDev || cfg.LogLevel != slog.LevelInfo || cfg.DBPath != "data/lifeledger.db" {
+	if cfg.Addr != ":8080" || cfg.Env != EnvDev || cfg.LogLevel != slog.LevelInfo {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 }

@@ -12,19 +12,14 @@ import (
 	"github.com/rohitshukla001/lifeledger/internal/version"
 )
 
-type Pinger interface {
-	Ping(ctx context.Context) error
-}
-
 type Server struct {
 	log     *slog.Logger
-	db      Pinger
 	http    *http.Server
 	started time.Time
 }
 
-func New(addr string, log *slog.Logger, db Pinger) *Server {
-	s := &Server{log: log, db: db, started: time.Now()}
+func New(addr string, log *slog.Logger) *Server {
+	s := &Server{log: log, started: time.Now()}
 	s.http = &http.Server{
 		Addr:              addr,
 		Handler:           s.Handler(),
@@ -80,28 +75,16 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 
 type healthResponse struct {
 	Status        string `json:"status"`
-	Database      string `json:"database"`
 	Version       string `json:"version"`
 	UptimeSeconds int64  `json:"uptime_seconds"`
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	resp := healthResponse{
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, healthResponse{
 		Status:        "ok",
-		Database:      "ok",
 		Version:       version.String(),
 		UptimeSeconds: int64(time.Since(s.started).Seconds()),
-	}
-	status := http.StatusOK
-
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-	defer cancel()
-	if err := s.db.Ping(ctx); err != nil {
-		s.log.Error("health check: database ping failed", "err", err)
-		resp.Status, resp.Database = "unavailable", "unavailable"
-		status = http.StatusServiceUnavailable
-	}
-	writeJSON(w, status, resp)
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

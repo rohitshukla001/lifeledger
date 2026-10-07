@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -17,12 +16,8 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-type fakeDB struct{ err error }
-
-func (f fakeDB) Ping(context.Context) error { return f.err }
-
 func TestHealthz(t *testing.T) {
-	srv := New(":0", testLogger(), fakeDB{})
+	srv := New(":0", testLogger())
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
@@ -36,30 +31,13 @@ func TestHealthz(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if body.Status != "ok" || body.Database != "ok" || body.Version == "" {
-		t.Fatalf("unexpected body: %+v", body)
-	}
-}
-
-func TestHealthzReportsDatabaseFailure(t *testing.T) {
-	srv := New(":0", testLogger(), fakeDB{err: errors.New("disk I/O error")})
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503", rec.Code)
-	}
-	var body healthResponse
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatal(err)
-	}
-	if body.Status != "unavailable" || body.Database != "unavailable" {
+	if body.Status != "ok" || body.Version == "" {
 		t.Fatalf("unexpected body: %+v", body)
 	}
 }
 
 func TestHealthzRejectsPost(t *testing.T) {
-	srv := New(":0", testLogger(), fakeDB{})
+	srv := New(":0", testLogger())
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/healthz", nil))
 
@@ -69,7 +47,7 @@ func TestHealthzRejectsPost(t *testing.T) {
 }
 
 func TestUnknownRouteIs404(t *testing.T) {
-	srv := New(":0", testLogger(), fakeDB{})
+	srv := New(":0", testLogger())
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/nope", nil))
 
@@ -83,7 +61,7 @@ func TestServeAndGracefulShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(ln.Addr().String(), testLogger(), fakeDB{})
+	srv := New(ln.Addr().String(), testLogger())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)

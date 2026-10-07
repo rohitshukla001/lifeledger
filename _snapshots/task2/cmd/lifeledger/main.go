@@ -13,7 +13,6 @@ import (
 
 	"github.com/rohitshukla001/lifeledger/internal/config"
 	"github.com/rohitshukla001/lifeledger/internal/server"
-	"github.com/rohitshukla001/lifeledger/internal/store"
 	"github.com/rohitshukla001/lifeledger/internal/version"
 )
 
@@ -97,18 +96,7 @@ type app struct {
 
 func (a *app) serve(ctx context.Context) int {
 	a.log.Info("starting lifeledger", "version", version.String(), "env", a.cfg.Env)
-
-	db, err := store.Open(ctx, a.cfg.DBPath)
-	if err != nil {
-		a.log.Error("cannot open database", "path", a.cfg.DBPath, "err", err)
-		return 1
-	}
-	defer db.Close()
-	if v, err := db.SchemaVersion(ctx); err == nil {
-		a.log.Info("database ready", "path", a.cfg.DBPath, "schema_version", v)
-	}
-
-	if err := server.New(a.cfg.Addr, a.log, db).Run(ctx); err != nil {
+	if err := server.New(a.cfg.Addr, a.log).Run(ctx); err != nil {
 		a.log.Error("server stopped with error", "err", err)
 		return 1
 	}

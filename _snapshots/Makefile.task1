@@ -1,0 +1,39 @@
+BINARY  := lifeledger
+BIN_DIR := bin
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+LDFLAGS := -s -w \
+	-X github.com/rohitshukla001/lifeledger/internal/version.Version=$(VERSION) \
+	-X github.com/rohitshukla001/lifeledger/internal/version.Commit=$(COMMIT)
+
+.PHONY: help build run test cover vet fmt fmt-check check clean
+
+help: ## Show the available targets.
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  %-10s %s\n", $$1, $$2}'
+
+build: ## Build the binary into ./bin.
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/lifeledger
+
+run: build ## Build and start the HTTP server.
+	./$(BIN_DIR)/$(BINARY) serve
+
+test: ## Run all tests with the race detector.
+	go test -race -count=1 ./...
+
+cover: ## Run tests and print the coverage for each package.
+	go test -count=1 -cover ./...
+
+vet: ## Run go vet.
+	go vet ./...
+
+fmt: ## Format all Go files.
+	gofmt -w .
+
+fmt-check: ## Fail if a Go file is not formatted.
+	@test -z "$$(gofmt -l .)" || (echo "Run 'make fmt' on:"; gofmt -l .; exit 1)
+
+check: fmt-check vet test ## Run all checks before a commit.
+
+clean: ## Remove build output.
+	rm -rf $(BIN_DIR)

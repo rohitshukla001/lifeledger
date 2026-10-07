@@ -12,13 +12,12 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("LIFELEDGER_ENV", "")
 	t.Setenv("LIFELEDGER_LOG_LEVEL", "")
 	t.Setenv("PORT", "")
-	t.Setenv("LIFELEDGER_DB_PATH", "")
 
 	cfg, err := Load("")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Addr != ":8080" || cfg.Env != EnvDev || cfg.LogLevel != slog.LevelInfo || cfg.DBPath != "data/lifeledger.db" {
+	if cfg.Addr != ":8080" || cfg.Env != EnvDev || cfg.LogLevel != slog.LevelInfo {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 }
@@ -46,28 +45,6 @@ func TestLoadAddrBeatsPort(t *testing.T) {
 	}
 	if cfg.Addr != "127.0.0.1:7000" {
 		t.Fatalf("Addr = %q, want 127.0.0.1:7000", cfg.Addr)
-	}
-}
-
-func TestLoadModelDefaultsAndBudget(t *testing.T) {
-	t.Setenv("LIFELEDGER_MODEL_SUPER", "")
-	t.Setenv("LIFELEDGER_DAILY_BUDGET_USD", "0.5")
-
-	cfg, err := Load("")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.ModelSuper != "nvidia/nemotron-3-super-120b-a12b" || cfg.DailyBudgetUSD != 0.5 {
-		t.Fatalf("unexpected llm config: %+v", cfg)
-	}
-}
-
-func TestLoadRejectsBadBudget(t *testing.T) {
-	for _, v := range []string{"-1", "lots"} {
-		t.Setenv("LIFELEDGER_DAILY_BUDGET_USD", v)
-		if _, err := Load(""); err == nil {
-			t.Errorf("budget %q: want error", v)
-		}
 	}
 }
 

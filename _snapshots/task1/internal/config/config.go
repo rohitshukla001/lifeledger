@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -20,14 +19,6 @@ type Config struct {
 	Addr     string
 	Env      string
 	LogLevel slog.Level
-	DBPath   string
-
-	NebiusAPIKey   string
-	NebiusBaseURL  string
-	ModelNano      string
-	ModelSuper     string
-	ModelUltra     string
-	DailyBudgetUSD float64
 }
 
 func Load(envFile string) (Config, error) {
@@ -38,14 +29,8 @@ func Load(envFile string) (Config, error) {
 	}
 
 	cfg := Config{
-		Addr:          getenv("LIFELEDGER_ADDR", ":8080"),
-		Env:           strings.ToLower(getenv("LIFELEDGER_ENV", EnvDev)),
-		DBPath:        getenv("LIFELEDGER_DB_PATH", "data/lifeledger.db"),
-		NebiusAPIKey:  os.Getenv("NEBIUS_API_KEY"),
-		NebiusBaseURL: getenv("NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1/"),
-		ModelNano:     getenv("LIFELEDGER_MODEL_NANO", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"),
-		ModelSuper:    getenv("LIFELEDGER_MODEL_SUPER", "nvidia/nemotron-3-super-120b-a12b"),
-		ModelUltra:    getenv("LIFELEDGER_MODEL_ULTRA", "nvidia/Nemotron-3-Ultra-550b-a55b"),
+		Addr: getenv("LIFELEDGER_ADDR", ":8080"),
+		Env:  strings.ToLower(getenv("LIFELEDGER_ENV", EnvDev)),
 	}
 
 	if port := os.Getenv("PORT"); port != "" && os.Getenv("LIFELEDGER_ADDR") == "" {
@@ -59,11 +44,6 @@ func Load(envFile string) (Config, error) {
 	if err := cfg.LogLevel.UnmarshalText([]byte(getenv("LIFELEDGER_LOG_LEVEL", "info"))); err != nil {
 		errs = append(errs, fmt.Errorf("LIFELEDGER_LOG_LEVEL: %w", err))
 	}
-	budget, err := strconv.ParseFloat(getenv("LIFELEDGER_DAILY_BUDGET_USD", "2"), 64)
-	if err != nil || budget < 0 {
-		errs = append(errs, fmt.Errorf("LIFELEDGER_DAILY_BUDGET_USD must be a number >= 0, got %q", os.Getenv("LIFELEDGER_DAILY_BUDGET_USD")))
-	}
-	cfg.DailyBudgetUSD = budget
 	return cfg, errors.Join(errs...)
 }
 

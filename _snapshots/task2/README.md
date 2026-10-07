@@ -15,13 +15,12 @@ LifeLedger is an entry in the Personal AI track of the [Nebius x NVIDIA Global A
 - NVIDIA Nemotron 3 models (Nano, Super, and Ultra) on Nebius Token Factory, with tool calling.
 - Automatic retry and fallback to a smaller model when a model is unavailable.
 - A daily spend limit that stops model calls before the account runs out of credit.
-- Local SQLite storage for obligations, memories, and conversations, with automatic schema migrations.
-- HTTP service with a health endpoint that also checks the database.
+- HTTP service with a health endpoint for container hosts.
 
 ## Architecture
 
 ```text
-Client ──HTTP──▶ lifeledger serve (Go) ──▶ internal/store ──▶ SQLite (data/lifeledger.db)
+Client ──HTTP──▶ lifeledger serve (Go)
                    └── GET /healthz
 
 lifeledger ask ──▶ internal/llm ──HTTPS──▶ Nebius Token Factory
@@ -30,12 +29,11 @@ lifeledger ask ──▶ internal/llm ──HTTPS──▶ Nebius Token Factory
                                            └── Nemotron 3 Ultra
 ```
 
-The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md).
+The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md).
 
 ## Prerequisites
 
-- Go 1.24 or later, with CGO enabled (the default).
-- A C compiler for the SQLite driver. On macOS, install the Xcode Command Line Tools with `xcode-select --install`.
+- Go 1.24 or later.
 - GNU Make.
 - Git.
 - A Nebius Token Factory account and API key. Create the key at [tokenfactory.nebius.com](https://tokenfactory.nebius.com).
@@ -81,10 +79,8 @@ The service is one Go binary. Each command of the binary is a separate entry poi
    The server sends a response like this:
 
    ```json
-   {"status":"ok","database":"ok","version":"dev (none)","uptime_seconds":0}
+   {"status":"ok","version":"dev (none)","uptime_seconds":0}
    ```
-
-   On the first start, LifeLedger makes the database file at `data/lifeledger.db`.
 
 ## Configuration
 
@@ -96,7 +92,6 @@ LifeLedger reads its settings from environment variables. It also reads a `.env`
 | `PORT` | none | Listen port that container hosts set. LifeLedger uses it only if `LIFELEDGER_ADDR` is empty. |
 | `LIFELEDGER_ENV` | `dev` | `dev` gives text logs. `prod` gives JSON logs. |
 | `LIFELEDGER_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
-| `LIFELEDGER_DB_PATH` | `data/lifeledger.db` | SQLite database file. LifeLedger makes the directory if it does not exist. |
 | `NEBIUS_API_KEY` | none | Token Factory API key. The model commands need it. |
 | `NEBIUS_BASE_URL` | `https://api.tokenfactory.nebius.com/v1/` | Token Factory endpoint. |
 | `LIFELEDGER_MODEL_NANO` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Model for fast, low-cost calls. |
@@ -139,7 +134,6 @@ Binary commands:
 cmd/lifeledger/     # Binary entry point and commands
 internal/config/    # Settings from environment variables and .env
 internal/llm/       # Token Factory client: tiers, retry, fallback, spend limit
-internal/store/     # SQLite storage, repositories, and SQL migrations
 internal/server/    # HTTP server and routes
 internal/version/   # Build version, set at build time
 docs/adr/           # Architecture decision records
@@ -151,10 +145,6 @@ docs/adr/           # Architecture decision records
 |---|---|---|
 | `address already in use` | A different process uses port 8080. | Set `LIFELEDGER_ADDR=:8081` in `.env`, or stop the other process. |
 | `go: go.mod requires go >= 1.24` | Your Go version is too old. | Install Go 1.24 or later. |
-| `go-sqlite3 requires cgo to work` | The binary was built with `CGO_ENABLED=0`. | Build with `CGO_ENABLED=1` and a C compiler installed. |
-| The first build or test run takes about one minute | Go compiles the SQLite C code one time. | Wait. Later builds use the build cache. |
-| `cannot open database` at startup | The directory of `LIFELEDGER_DB_PATH` cannot be written. | Set `LIFELEDGER_DB_PATH` to a path that you can write to. |
-| `/healthz` returns `503` | The database does not respond. | Read the server log for `database ping failed`. |
 | `config error: LIFELEDGER_ENV must be "dev" or "prod"` | A setting has a value that is not permitted. | Correct the value in `.env` or in the environment. |
 | Values in `.env` have no effect | You started the binary from a different directory. | Start it from the repository root, or use `-env-file`. |
 | `llm: NEBIUS_API_KEY is not set` | `.env` has no API key. | Set `NEBIUS_API_KEY` in `.env`. |
@@ -168,7 +158,6 @@ docs/adr/           # Architecture decision records
 - [LICENSE](LICENSE): MIT license.
 - [.env.example](.env.example): all settings with comments.
 - [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md): model tiers, fallback, and spend control.
-- [ADR 0002](docs/adr/0002-sqlite-storage.md): SQLite storage and migrations.
 - [Token Factory documentation](https://docs.tokenfactory.nebius.com/quickstart).
 
 ## License
