@@ -15,6 +15,7 @@ LifeLedger is an entry in the Personal AI track of the [Nebius x NVIDIA Global A
 - NVIDIA Nemotron 3 models (Nano, Super, and Ultra) on Nebius Token Factory, with tool calling.
 - Automatic retry and fallback to a smaller model when a model is unavailable.
 - A daily spend limit that stops model calls before the account runs out of credit.
+- Memory that you can see, edit, and delete. Recall finds memories by meaning (embeddings) and by keywords, and it still works without network access.
 - Local SQLite storage for obligations, memories, and conversations, with automatic schema migrations.
 - HTTP service with a health endpoint that also checks the database.
 
@@ -27,10 +28,15 @@ Client ──HTTP──▶ lifeledger serve (Go) ──▶ internal/store ──
 lifeledger ask ──▶ internal/llm ──HTTPS──▶ Nebius Token Factory
                    (tiers, retry,          ├── Nemotron 3 Nano
                     fallback, budget)      ├── Nemotron 3 Super
-                                           └── Nemotron 3 Ultra
+                                           ├── Nemotron 3 Ultra
+                                           └── Qwen3 Embedding 8B
+                        ▲
+lifeledger memory ──▶ internal/memory ──▶ internal/store ──▶ SQLite
+                      (remember, recall,
+                       edit, forget)
 ```
 
-The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md).
+The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md).
 
 ## Prerequisites
 
@@ -102,6 +108,7 @@ LifeLedger reads its settings from environment variables. It also reads a `.env`
 | `LIFELEDGER_MODEL_NANO` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Model for fast, low-cost calls. |
 | `LIFELEDGER_MODEL_SUPER` | `nvidia/nemotron-3-super-120b-a12b` | Default model. |
 | `LIFELEDGER_MODEL_ULTRA` | `nvidia/Nemotron-3-Ultra-550b-a55b` | Model for complex reasoning. |
+| `LIFELEDGER_MODEL_EMBED` | `Qwen/Qwen3-Embedding-8B` | Embedding model for memory recall. |
 | `LIFELEDGER_DAILY_BUDGET_USD` | `2` | Maximum model spend for each UTC day. `0` means no limit. |
 
 To use a different settings file, use the `-env-file` flag:
@@ -130,6 +137,12 @@ Binary commands:
 | `lifeledger serve` | Start the HTTP server. |
 | `lifeledger models` | Show the Token Factory catalog and check the configured models. |
 | `lifeledger ask [-tier nano\|super\|ultra] PROMPT` | Send one prompt to a Nemotron model. The default tier is `super`. |
+| `lifeledger memory add [-kind fact\|preference\|note] TEXT` | Save a memory. |
+| `lifeledger memory list` | Show all memories, newest first. |
+| `lifeledger memory recall [-n N] QUERY` | Show the memories that match a query, with a score. |
+| `lifeledger memory edit ID TEXT` | Change the text of a memory. |
+| `lifeledger memory forget ID` | Delete a memory permanently. |
+| `lifeledger memory reindex` | Make embeddings for the memories that have none. |
 | `lifeledger version` | Show the build version. |
 | `lifeledger help` | Show the help text. |
 
@@ -138,7 +151,8 @@ Binary commands:
 ```text
 cmd/lifeledger/     # Binary entry point and commands
 internal/config/    # Settings from environment variables and .env
-internal/llm/       # Token Factory client: tiers, retry, fallback, spend limit
+internal/llm/       # Token Factory client: chat, embeddings, retry, fallback, spend limit
+internal/memory/    # Memory engine: remember, recall, edit, forget, reindex
 internal/store/     # SQLite storage, repositories, and SQL migrations
 internal/server/    # HTTP server and routes
 internal/version/   # Build version, set at build time
@@ -155,6 +169,9 @@ docs/adr/           # Architecture decision records
 | The first build or test run takes about one minute | Go compiles the SQLite C code one time. | Wait. Later builds use the build cache. |
 | `cannot open database` at startup | The directory of `LIFELEDGER_DB_PATH` cannot be written. | Set `LIFELEDGER_DB_PATH` to a path that you can write to. |
 | `/healthz` returns `503` | The database does not respond. | Read the server log for `database ping failed`. |
+| `using keyword matching only` | `NEBIUS_API_KEY` is not set. Recall cannot use embeddings. | Set `NEBIUS_API_KEY`, then run `lifeledger memory reindex`. |
+| `memory saved without embedding` in the log | The embedding call failed. The memory is saved. | Run `lifeledger memory reindex` when Token Factory is available. |
+| Recall misses memories after a change of `LIFELEDGER_MODEL_EMBED` | The stored embeddings are from the old model. | Run `lifeledger memory reindex`. |
 | `config error: LIFELEDGER_ENV must be "dev" or "prod"` | A setting has a value that is not permitted. | Correct the value in `.env` or in the environment. |
 | Values in `.env` have no effect | You started the binary from a different directory. | Start it from the repository root, or use `-env-file`. |
 | `llm: NEBIUS_API_KEY is not set` | `.env` has no API key. | Set `NEBIUS_API_KEY` in `.env`. |
@@ -169,6 +186,7 @@ docs/adr/           # Architecture decision records
 - [.env.example](.env.example): all settings with comments.
 - [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md): model tiers, fallback, and spend control.
 - [ADR 0002](docs/adr/0002-sqlite-storage.md): SQLite storage and migrations.
+- [ADR 0003](docs/adr/0003-memory-recall.md): memory recall with embeddings and keyword match.
 - [Token Factory documentation](https://docs.tokenfactory.nebius.com/quickstart).
 
 ## License

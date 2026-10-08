@@ -19,6 +19,25 @@ func fakeTokenFactory(t *testing.T, catalog []string) {
 				data = append(data, map[string]string{"id": id})
 			}
 			json.NewEncoder(w).Encode(map[string]any{"data": data})
+		case "/v1/embeddings":
+			var req struct {
+				Input []string `json:"input"`
+			}
+			json.NewDecoder(r.Body).Decode(&req)
+			var data []map[string]any
+			for i, in := range req.Input {
+				vec := []float32{0, 0, 1}
+				for _, w := range strings.Fields(strings.ToLower(in)) {
+					switch w {
+					case "car", "vehicle":
+						vec = []float32{1, 0, 0}
+					case "electricity":
+						vec = []float32{0, 1, 0}
+					}
+				}
+				data = append(data, map[string]any{"index": i, "embedding": vec})
+			}
+			json.NewEncoder(w).Encode(map[string]any{"data": data, "usage": map[string]int{"prompt_tokens": 5}})
 		case "/v1/chat/completions":
 			var req struct {
 				Model string `json:"model"`
@@ -39,6 +58,7 @@ func fakeTokenFactory(t *testing.T, catalog []string) {
 	t.Setenv("LIFELEDGER_MODEL_NANO", "n")
 	t.Setenv("LIFELEDGER_MODEL_SUPER", "s")
 	t.Setenv("LIFELEDGER_MODEL_ULTRA", "u")
+	t.Setenv("LIFELEDGER_MODEL_EMBED", "e")
 }
 
 func TestAskPrintsReply(t *testing.T) {
@@ -78,19 +98,19 @@ func TestAskNeedsAPIKey(t *testing.T) {
 }
 
 func TestModelsMarksConfiguredTiers(t *testing.T) {
-	fakeTokenFactory(t, []string{"n", "other", "s", "u"})
+	fakeTokenFactory(t, []string{"e", "n", "other", "s", "u"})
 	var out, errOut bytes.Buffer
 	if code := run([]string{"-env-file", "", "models"}, &out, &errOut); code != 0 {
 		t.Fatalf("exit code = %d, stderr = %s", code, errOut.String())
 	}
-	want := "* n (nano)\n  other\n* s (super)\n* u (ultra)\n"
+	want := "* e (embed)\n* n (nano)\n  other\n* s (super)\n* u (ultra)\n"
 	if out.String() != want {
 		t.Fatalf("stdout = %q, want %q", out.String(), want)
 	}
 }
 
 func TestModelsFailsWhenConfiguredModelIsMissing(t *testing.T) {
-	fakeTokenFactory(t, []string{"n", "s"})
+	fakeTokenFactory(t, []string{"e", "n", "s"})
 	var out, errOut bytes.Buffer
 	if code := run([]string{"-env-file", "", "models"}, &out, &errOut); code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)

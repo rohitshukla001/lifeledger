@@ -27,6 +27,7 @@ type Config struct {
 	ModelNano      string
 	ModelSuper     string
 	ModelUltra     string
+	ModelEmbed     string
 	DailyBudgetUSD float64
 }
 
@@ -46,6 +47,7 @@ func Load(envFile string) (Config, error) {
 		ModelNano:     getenv("LIFELEDGER_MODEL_NANO", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"),
 		ModelSuper:    getenv("LIFELEDGER_MODEL_SUPER", "nvidia/nemotron-3-super-120b-a12b"),
 		ModelUltra:    getenv("LIFELEDGER_MODEL_ULTRA", "nvidia/Nemotron-3-Ultra-550b-a55b"),
+		ModelEmbed:    getenv("LIFELEDGER_MODEL_EMBED", "Qwen/Qwen3-Embedding-8B"),
 	}
 
 	if port := os.Getenv("PORT"); port != "" && os.Getenv("LIFELEDGER_ADDR") == "" {

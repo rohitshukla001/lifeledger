@@ -19,6 +19,7 @@ func (a *app) llmClient() (*llm.Client, error) {
 			llm.Super: a.cfg.ModelSuper,
 			llm.Ultra: a.cfg.ModelUltra,
 		},
+		EmbedModel:     a.cfg.ModelEmbed,
 		DailyBudgetUSD: a.cfg.DailyBudgetUSD,
 		Logger:         a.log,
 	})
@@ -36,22 +37,26 @@ func (a *app) models(ctx context.Context) int {
 		return 1
 	}
 
-	configured := map[string]llm.Tier{}
-	for _, t := range []llm.Tier{llm.Nano, llm.Super, llm.Ultra} {
-		configured[client.Model(t)] = t
+	type role struct{ name, id string }
+	roles := []role{
+		{"nano", client.Model(llm.Nano)},
+		{"super", client.Model(llm.Super)},
+		{"ultra", client.Model(llm.Ultra)},
+		{"embed", client.EmbeddingModel()},
 	}
 	for _, id := range ids {
-		if t, ok := configured[id]; ok {
-			fmt.Fprintf(a.stdout, "* %s (%s)\n", id, t)
+		i := slices.IndexFunc(roles, func(r role) bool { return r.id == id })
+		if i >= 0 {
+			fmt.Fprintf(a.stdout, "* %s (%s)\n", id, roles[i].name)
 			continue
 		}
 		fmt.Fprintf(a.stdout, "  %s\n", id)
 	}
 
 	missing := 0
-	for id, t := range configured {
-		if !slices.Contains(ids, id) {
-			fmt.Fprintf(a.stderr, "configured %s model %q is not in the Token Factory catalog\n", t, id)
+	for _, r := range roles {
+		if !slices.Contains(ids, r.id) {
+			fmt.Fprintf(a.stderr, "configured %s model %q is not in the Token Factory catalog\n", r.name, r.id)
 			missing++
 		}
 	}

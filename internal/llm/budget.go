@@ -23,6 +23,7 @@ var prices = map[string]price{
 	"nvidia/nvidia-nemotron-3-nano-30b-a3b": {0.06, 0.24},
 	"nvidia/nemotron-3-super-120b-a12b":     {0.30, 0.90},
 	"nvidia/nemotron-3-ultra-550b-a55b":     {1.00, 3.00},
+	"qwen/qwen3-embedding-8b":               {0.01, 0},
 }
 
 func priceFor(model string) price {

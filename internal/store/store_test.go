@@ -52,8 +52,8 @@ func TestOpenMigratesOnceAndReopens(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer s.Close()
-	if v, err := s.SchemaVersion(ctx); err != nil || v != 1 {
-		t.Fatalf("schema version = %d, %v; want 1", v, err)
+	if v, err := s.SchemaVersion(ctx); err != nil || v != 2 {
+		t.Fatalf("schema version = %d, %v; want 2", v, err)
 	}
 	var journal string
 	var foreignKeys int
@@ -72,13 +72,13 @@ func TestFailedMigrationIsRolledBack(t *testing.T) {
 	s := openTest(t)
 
 	bad := fstest.MapFS{
-		"migrations/0002_ok_then_broken.sql": {Data: []byte(`CREATE TABLE half (id INTEGER); INSERT INTO nope VALUES (1);`)},
+		"migrations/0003_ok_then_broken.sql": {Data: []byte(`CREATE TABLE half (id INTEGER); INSERT INTO nope VALUES (1);`)},
 	}
 	if err := migrate(ctx, s.db, bad); err == nil {
 		t.Fatal("want error from broken migration")
 	}
-	if v, _ := s.SchemaVersion(ctx); v != 1 {
-		t.Fatalf("schema version = %d, want 1", v)
+	if v, _ := s.SchemaVersion(ctx); v != 2 {
+		t.Fatalf("schema version = %d, want 2", v)
 	}
 	var n int
 	s.db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE name = 'half'`).Scan(&n)
@@ -354,5 +354,55 @@ func TestDeleteConversationCascades(t *testing.T) {
 	}
 	if _, err := s.GetConversation(ctx, newer.ID); err != nil {
 		t.Fatalf("other conversation affected: %v", err)
+	}
+}
+
+func TestMemoryEmbeddings(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+
+	a := &Memory{Content: "Car insurance renews in March"}
+	b := &Memory{Content: "Prefers WhatsApp reminders"}
+	for _, m := range []*Memory{a, b} {
+		if err := s.AddMemory(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	missing, err := s.MemoriesWithoutEmbedding(ctx, "embed-v1", 10)
+	if err != nil || len(missing) != 2 {
+		t.Fatalf("missing = %v, %v; want both", missing, err)
+	}
+
+	vec := []float32{0.25, -1.5, 3e-7}
+	if err := s.SetMemoryEmbedding(ctx, a.ID, "embed-v1", vec); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetMemoryEmbedding(ctx, b.ID, "embed-v0", []float32{1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetMemoryEmbedding(ctx, 999, "embed-v1", vec); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("embedding for missing memory: %v", err)
+	}
+
+	got, err := s.MemoryEmbeddings(ctx, "embed-v1")
+	if err != nil || len(got) != 1 || len(got[a.ID]) != 3 || got[a.ID][0] != 0.25 || got[a.ID][1] != -1.5 || got[a.ID][2] != 3e-7 {
+		t.Fatalf("embeddings = %v, %v", got, err)
+	}
+	if missing, _ := s.MemoriesWithoutEmbedding(ctx, "embed-v1", 10); len(missing) != 1 || missing[0].ID != b.ID {
+		t.Fatalf("an embedding from another model must count as missing: %v", missing)
+	}
+
+	if err := s.UpdateMemoryContent(ctx, a.ID, "Car insurance renews in April"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.MemoryEmbeddings(ctx, "embed-v1"); len(got) != 0 {
+		t.Fatal("editing the content must clear the stale embedding")
+	}
+}
+
+func TestDecodeVectorRejectsTruncatedBlob(t *testing.T) {
+	if _, err := decodeVector([]byte{1, 2, 3}); err == nil {
+		t.Fatal("want error for 3-byte blob")
 	}
 }

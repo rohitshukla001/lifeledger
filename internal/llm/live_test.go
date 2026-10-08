@@ -3,6 +3,7 @@ package llm_test
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -27,6 +28,7 @@ func liveClient(t *testing.T) *llm.Client {
 		BaseURL:        cfg.NebiusBaseURL,
 		APIKey:         cfg.NebiusAPIKey,
 		Models:         map[llm.Tier]string{llm.Nano: cfg.ModelNano, llm.Super: cfg.ModelSuper, llm.Ultra: cfg.ModelUltra},
+		EmbedModel:     cfg.ModelEmbed,
 		DailyBudgetUSD: 0.10,
 	})
 	if err != nil {
@@ -52,6 +54,39 @@ func TestLiveConfiguredModelsExist(t *testing.T) {
 			t.Errorf("%s model %q not in catalog", tier, c.Model(tier))
 		}
 	}
+	if !slices.Contains(ids, c.EmbeddingModel()) {
+		t.Errorf("embedding model %q not in catalog", c.EmbeddingModel())
+	}
+}
+
+func TestLiveEmbeddingsRankByMeaning(t *testing.T) {
+	c := liveClient(t)
+	vecs, err := c.Embed(liveCtx(t), []string{
+		"Car insurance renews in March",
+		"My vehicle policy expires soon",
+		"The electricity bill is due on the 5th",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vecs[0]) == 0 || len(vecs[0]) != len(vecs[1]) || len(vecs[1]) != len(vecs[2]) {
+		t.Fatalf("bad dimensions: %d, %d, %d", len(vecs[0]), len(vecs[1]), len(vecs[2]))
+	}
+	related, unrelated := cosine(vecs[0], vecs[1]), cosine(vecs[0], vecs[2])
+	t.Logf("dims=%d related=%.3f unrelated=%.3f spend=$%.6f", len(vecs[0]), related, unrelated, c.Budget().Spent())
+	if related <= unrelated {
+		t.Errorf("related pair (%.3f) must score above unrelated pair (%.3f)", related, unrelated)
+	}
+}
+
+func cosine(a, b []float32) float64 {
+	var dot, na, nb float64
+	for i := range a {
+		dot += float64(a[i]) * float64(b[i])
+		na += float64(a[i]) * float64(a[i])
+		nb += float64(b[i]) * float64(b[i])
+	}
+	return dot / math.Sqrt(na*nb)
 }
 
 func TestLiveChatEachTier(t *testing.T) {

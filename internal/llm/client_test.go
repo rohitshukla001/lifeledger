@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,15 +20,40 @@ var testModels = map[Tier]string{
 }
 
 type fakeTF struct {
-	t        *testing.T
-	mu       sync.Mutex
-	requests []chatRequest
-	reply    func(n int, req chatRequest) (int, string)
+	t          *testing.T
+	mu         sync.Mutex
+	requests   []chatRequest
+	reply      func(n int, req chatRequest) (int, string)
+	embedCalls int
+	embedReply func(inputs []string) (int, string)
 }
 
 func (f *fakeTF) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
 		f.t.Errorf("Authorization = %q", got)
+	}
+	if r.URL.Path == "/v1/embeddings" {
+		var req struct {
+			Model string   `json:"model"`
+			Input []string `json:"input"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		if req.Model != "Qwen/Qwen3-Embedding-8B" {
+			f.t.Errorf("embedding model = %q", req.Model)
+		}
+		f.embedCalls++
+		if f.embedReply != nil {
+			status, body := f.embedReply(req.Input)
+			w.WriteHeader(status)
+			w.Write([]byte(body))
+			return
+		}
+		var data []string
+		for i := len(req.Input) - 1; i >= 0; i-- {
+			data = append(data, fmt.Sprintf(`{"index":%d,"embedding":[%d,0.5]}`, i, len(req.Input[i])))
+		}
+		fmt.Fprintf(w, `{"data":[%s],"usage":{"prompt_tokens":1000000}}`, strings.Join(data, ","))
+		return
 	}
 	if r.URL.Path == "/v1/models" {
 		w.Write([]byte(`{"data":[{"id":"b-model"},{"id":"a-model"}]}`))
@@ -72,7 +98,7 @@ func newTestClient(t *testing.T, reply func(int, chatRequest) (int, string), bud
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 
-	c, err := New(Options{BaseURL: srv.URL + "/v1", APIKey: "test-key", Models: testModels, DailyBudgetUSD: budget})
+	c, err := New(Options{BaseURL: srv.URL + "/v1", APIKey: "test-key", Models: testModels, EmbedModel: "Qwen/Qwen3-Embedding-8B", DailyBudgetUSD: budget})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,9 +306,10 @@ func TestListModelsIsSorted(t *testing.T) {
 
 func TestNewValidatesOptions(t *testing.T) {
 	cases := map[string]Options{
-		"missing key":   {BaseURL: "https://x/v1", Models: testModels},
-		"bad url":       {BaseURL: "not a url", APIKey: "k", Models: testModels},
-		"missing model": {BaseURL: "https://x/v1", APIKey: "k", Models: map[Tier]string{Nano: "a", Super: "b"}},
+		"missing key":   {BaseURL: "https://x/v1", Models: testModels, EmbedModel: "e"},
+		"bad url":       {BaseURL: "not a url", APIKey: "k", Models: testModels, EmbedModel: "e"},
+		"missing model": {BaseURL: "https://x/v1", APIKey: "k", Models: map[Tier]string{Nano: "a", Super: "b"}, EmbedModel: "e"},
+		"missing embed": {BaseURL: "https://x/v1", APIKey: "k", Models: testModels},
 	}
 	for name, o := range cases {
 		if _, err := New(o); err == nil {
@@ -298,5 +325,55 @@ func TestBackoffHonoursRetryAfter(t *testing.T) {
 	}
 	if got := backoff(2, &transportError{errors.New("reset")}); got < time.Second || got >= 1500*time.Millisecond {
 		t.Fatalf("backoff = %v, want [1s, 1.5s)", got)
+	}
+}
+
+func TestEmbedOrdersByIndexAndChargesBudget(t *testing.T) {
+	c, fake := newTestClient(t, nil, 0)
+
+	vecs, err := c.Embed(context.Background(), []string{"a", "bbb", "cc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vecs) != 3 || vecs[0][0] != 1 || vecs[1][0] != 3 || vecs[2][0] != 2 {
+		t.Fatalf("vectors out of order: %v", vecs)
+	}
+	if got := c.Budget().Spent(); got != 0.01 {
+		t.Fatalf("spent = %v, want 0.01", got)
+	}
+
+	if vecs, err := c.Embed(context.Background(), nil); err != nil || vecs != nil || fake.embedCalls != 1 {
+		t.Fatalf("empty input must not call the API: %v, %v, calls=%d", vecs, err, fake.embedCalls)
+	}
+}
+
+func TestEmbedRejectsShortOrBrokenReplies(t *testing.T) {
+	replies := map[string]string{
+		"too few":   `{"data":[{"index":0,"embedding":[1]}]}`,
+		"duplicate": `{"data":[{"index":0,"embedding":[1]},{"index":0,"embedding":[2]}]}`,
+		"bad index": `{"data":[{"index":0,"embedding":[1]},{"index":7,"embedding":[2]}]}`,
+	}
+	for name, body := range replies {
+		c, fake := newTestClient(t, nil, 0)
+		fake.embedReply = func([]string) (int, string) { return 200, body }
+		if _, err := c.Embed(context.Background(), []string{"x", "y"}); err == nil {
+			t.Errorf("%s: want error", name)
+		}
+	}
+}
+
+func TestEmbedRetriesServerErrors(t *testing.T) {
+	c, fake := newTestClient(t, nil, 0)
+	fake.embedReply = func(in []string) (int, string) {
+		if fake.embedCalls == 1 {
+			return 503, "busy"
+		}
+		return 200, `{"data":[{"index":0,"embedding":[1,2]}]}`
+	}
+	if _, err := c.Embed(context.Background(), []string{"x"}); err != nil {
+		t.Fatal(err)
+	}
+	if fake.embedCalls != 2 {
+		t.Fatalf("calls = %d, want 2", fake.embedCalls)
 	}
 }

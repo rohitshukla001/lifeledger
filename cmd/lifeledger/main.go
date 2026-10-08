@@ -26,6 +26,7 @@ Commands:
   serve                 Start the HTTP server.
   models                List Token Factory models and check the configured ones.
   ask [-tier T] PROMPT  Send one prompt to Nemotron (T is nano, super, or ultra).
+  memory <command>      Add, list, recall, edit, or forget memories.
   version               Print the build version.
   help                  Show this help.
 
@@ -81,6 +82,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return a.models(ctx)
 	case "ask":
 		return a.ask(ctx, fs.Args()[1:])
+	case "memory":
+		return a.memory(ctx, fs.Args()[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", cmd)
 		fs.Usage()

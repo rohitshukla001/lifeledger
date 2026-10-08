@@ -51,13 +51,14 @@ func TestLoadAddrBeatsPort(t *testing.T) {
 
 func TestLoadModelDefaultsAndBudget(t *testing.T) {
 	t.Setenv("LIFELEDGER_MODEL_SUPER", "")
+	t.Setenv("LIFELEDGER_MODEL_EMBED", "")
 	t.Setenv("LIFELEDGER_DAILY_BUDGET_USD", "0.5")
 
 	cfg, err := Load("")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.ModelSuper != "nvidia/nemotron-3-super-120b-a12b" || cfg.DailyBudgetUSD != 0.5 {
+	if cfg.ModelSuper != "nvidia/nemotron-3-super-120b-a12b" || cfg.ModelEmbed != "Qwen/Qwen3-Embedding-8B" || cfg.DailyBudgetUSD != 0.5 {
 		t.Fatalf("unexpected llm config: %+v", cfg)
 	}
 }

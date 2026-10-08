@@ -44,6 +44,7 @@ type Options struct {
 	BaseURL        string
 	APIKey         string
 	Models         map[Tier]string
+	EmbedModel     string
 	DailyBudgetUSD float64
 	HTTPClient     *http.Client
 	Logger         *slog.Logger
@@ -53,6 +54,7 @@ type Client struct {
 	baseURL     string
 	apiKey      string
 	models      map[Tier]string
+	embedModel  string
 	budget      *Budget
 	http        *http.Client
 	log         *slog.Logger
@@ -73,11 +75,15 @@ func New(o Options) (*Client, error) {
 			return nil, fmt.Errorf("llm: no model configured for tier %q", t)
 		}
 	}
+	if o.EmbedModel == "" {
+		return nil, errors.New("llm: no embedding model configured")
+	}
 
 	c := &Client{
 		baseURL:     strings.TrimSuffix(o.BaseURL, "/") + "/",
 		apiKey:      o.APIKey,
 		models:      o.Models,
+		embedModel:  o.EmbedModel,
 		budget:      NewBudget(o.DailyBudgetUSD),
 		http:        o.HTTPClient,
 		log:         o.Logger,
@@ -93,8 +99,49 @@ func New(o Options) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) Model(t Tier) string { return c.models[t] }
-func (c *Client) Budget() *Budget     { return c.budget }
+func (c *Client) Model(t Tier) string    { return c.models[t] }
+func (c *Client) EmbeddingModel() string { return c.embedModel }
+func (c *Client) Budget() *Budget        { return c.budget }
+
+func (c *Client) Embed(ctx context.Context, inputs []string) ([][]float32, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+	if err := c.budget.check(); err != nil {
+		return nil, err
+	}
+	body, err := json.Marshal(struct {
+		Model string   `json:"model"`
+		Input []string `json:"input"`
+	}{c.embedModel, inputs})
+	if err != nil {
+		return nil, fmt.Errorf("llm: encode embedding request: %w", err)
+	}
+
+	var out struct {
+		Data []struct {
+			Index     int       `json:"index"`
+			Embedding []float32 `json:"embedding"`
+		} `json:"data"`
+		Usage Usage `json:"usage"`
+	}
+	if err := c.do(ctx, http.MethodPost, "embeddings", body, &out); err != nil {
+		return nil, err
+	}
+	c.budget.add(priceFor(c.embedModel).cost(out.Usage))
+
+	if len(out.Data) != len(inputs) {
+		return nil, fmt.Errorf("llm: %s returned %d embeddings for %d inputs", c.embedModel, len(out.Data), len(inputs))
+	}
+	vecs := make([][]float32, len(inputs))
+	for _, d := range out.Data {
+		if d.Index < 0 || d.Index >= len(inputs) || vecs[d.Index] != nil {
+			return nil, fmt.Errorf("llm: %s returned an invalid embedding index %d", c.embedModel, d.Index)
+		}
+		vecs[d.Index] = d.Embedding
+	}
+	return vecs, nil
+}
 
 func (c *Client) Chat(ctx context.Context, req Request) (*Response, error) {
 	tier := req.Tier
