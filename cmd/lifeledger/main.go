@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	_ "time/tzdata"
 
 	"github.com/rohitshukla001/lifeledger/internal/config"
 	"github.com/rohitshukla001/lifeledger/internal/server"
@@ -27,6 +28,7 @@ Commands:
   models                List Token Factory models and check the configured ones.
   ask [-tier T] PROMPT  Send one prompt to Nemotron (T is nano, super, or ultra).
   memory <command>      Add, list, recall, edit, or forget memories.
+  chat [-c ID]          Talk to the LifeLedger agent in the terminal.
   version               Print the build version.
   help                  Show this help.
 
@@ -34,10 +36,14 @@ Flags:
 `
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(runWithInput(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	return runWithInput(args, os.Stdin, stdout, stderr)
+}
+
+func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("lifeledger", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	envFile := fs.String("env-file", ".env", "path to an optional .env file")
@@ -70,7 +76,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "config error:", err)
 		return 1
 	}
-	a := &app{cfg: cfg, log: newLogger(cfg, stderr), stdout: stdout, stderr: stderr}
+	a := &app{cfg: cfg, log: newLogger(cfg, stderr), stdin: stdin, stdout: stdout, stderr: stderr}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -84,6 +90,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return a.ask(ctx, fs.Args()[1:])
 	case "memory":
 		return a.memory(ctx, fs.Args()[1:])
+	case "chat":
+		return a.chat(ctx, fs.Args()[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", cmd)
 		fs.Usage()
@@ -94,6 +102,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 type app struct {
 	cfg    config.Config
 	log    *slog.Logger
+	stdin  io.Reader
 	stdout io.Writer
 	stderr io.Writer
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -21,6 +22,8 @@ type Config struct {
 	Env      string
 	LogLevel slog.Level
 	DBPath   string
+	Location *time.Location
+	Currency string
 
 	NebiusAPIKey   string
 	NebiusBaseURL  string
@@ -42,6 +45,7 @@ func Load(envFile string) (Config, error) {
 		Addr:          getenv("LIFELEDGER_ADDR", ":8080"),
 		Env:           strings.ToLower(getenv("LIFELEDGER_ENV", EnvDev)),
 		DBPath:        getenv("LIFELEDGER_DB_PATH", "data/lifeledger.db"),
+		Currency:      strings.ToUpper(getenv("LIFELEDGER_CURRENCY", "USD")),
 		NebiusAPIKey:  os.Getenv("NEBIUS_API_KEY"),
 		NebiusBaseURL: getenv("NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1/"),
 		ModelNano:     getenv("LIFELEDGER_MODEL_NANO", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"),
@@ -60,6 +64,14 @@ func Load(envFile string) (Config, error) {
 	}
 	if err := cfg.LogLevel.UnmarshalText([]byte(getenv("LIFELEDGER_LOG_LEVEL", "info"))); err != nil {
 		errs = append(errs, fmt.Errorf("LIFELEDGER_LOG_LEVEL: %w", err))
+	}
+	loc, err := time.LoadLocation(getenv("LIFELEDGER_TIMEZONE", "UTC"))
+	if err != nil {
+		errs = append(errs, fmt.Errorf("LIFELEDGER_TIMEZONE: %w", err))
+	}
+	cfg.Location = loc
+	if len(cfg.Currency) != 3 {
+		errs = append(errs, fmt.Errorf("LIFELEDGER_CURRENCY must be a 3-letter ISO 4217 code, got %q", cfg.Currency))
 	}
 	budget, err := strconv.ParseFloat(getenv("LIFELEDGER_DAILY_BUDGET_USD", "2"), 64)
 	if err != nil || budget < 0 {

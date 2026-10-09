@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadDefaults(t *testing.T) {
@@ -13,12 +14,15 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("LIFELEDGER_LOG_LEVEL", "")
 	t.Setenv("PORT", "")
 	t.Setenv("LIFELEDGER_DB_PATH", "")
+	t.Setenv("LIFELEDGER_TIMEZONE", "")
+	t.Setenv("LIFELEDGER_CURRENCY", "")
 
 	cfg, err := Load("")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Addr != ":8080" || cfg.Env != EnvDev || cfg.LogLevel != slog.LevelInfo || cfg.DBPath != "data/lifeledger.db" {
+	if cfg.Addr != ":8080" || cfg.Env != EnvDev || cfg.LogLevel != slog.LevelInfo || cfg.DBPath != "data/lifeledger.db" ||
+		cfg.Location != time.UTC || cfg.Currency != "USD" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 }
@@ -60,6 +64,28 @@ func TestLoadModelDefaultsAndBudget(t *testing.T) {
 	}
 	if cfg.ModelSuper != "nvidia/nemotron-3-super-120b-a12b" || cfg.ModelEmbed != "Qwen/Qwen3-Embedding-8B" || cfg.DailyBudgetUSD != 0.5 {
 		t.Fatalf("unexpected llm config: %+v", cfg)
+	}
+}
+
+func TestLoadTimezoneAndCurrency(t *testing.T) {
+	t.Setenv("LIFELEDGER_TIMEZONE", "Asia/Kolkata")
+	t.Setenv("LIFELEDGER_CURRENCY", "inr")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Location.String() != "Asia/Kolkata" || cfg.Currency != "INR" {
+		t.Fatalf("location = %v, currency = %q", cfg.Location, cfg.Currency)
+	}
+
+	for key, bad := range map[string]string{"LIFELEDGER_TIMEZONE": "Mars/Olympus", "LIFELEDGER_CURRENCY": "RUPEE"} {
+		t.Run(key, func(t *testing.T) {
+			t.Setenv(key, bad)
+			if _, err := Load(""); err == nil {
+				t.Fatalf("%s=%s: want error", key, bad)
+			}
+		})
 	}
 }
 
