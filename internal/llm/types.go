@@ -64,6 +64,12 @@ type Request struct {
 	Tools       []Tool
 	Temperature *float64
 	MaxTokens   int
+	JSONSchema  *JSONSchema
+}
+
+type JSONSchema struct {
+	Name   string
+	Schema json.RawMessage
 }
 
 type Usage struct {

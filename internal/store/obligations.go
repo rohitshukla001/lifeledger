@@ -40,6 +40,15 @@ const (
 	StatusCancelled Status = "cancelled"
 )
 
+var (
+	Categories = []Category{
+		CategoryBill, CategorySubscription, CategoryRenewal, CategoryWarranty,
+		CategoryDocument, CategoryDeadline, CategoryOther,
+	}
+	Recurrences = []Recurrence{RecurNone, RecurWeekly, RecurMonthly, RecurQuarterly, RecurYearly}
+	Statuses    = []Status{StatusOpen, StatusDone, StatusSnoozed, StatusCancelled}
+)
+
 type Obligation struct {
 	ID           int64
 	Title        string
@@ -80,9 +89,16 @@ func (s *Store) CreateObligation(ctx context.Context, o *Obligation) error {
 	if o.Source == "" {
 		o.Source = "user"
 	}
-	now := s.stamp()
+	return s.insertObligation(ctx, s.db, o)
+}
 
-	res, err := s.db.ExecContext(ctx, `INSERT INTO obligations (
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func (s *Store) insertObligation(ctx context.Context, ex execer, o *Obligation) error {
+	now := s.stamp()
+	res, err := ex.ExecContext(ctx, `INSERT INTO obligations (
 		title, category, amount_minor, currency, due_on, recurrence, status,
 		snoozed_until, notes, source, source_ref, created_at, updated_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

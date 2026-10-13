@@ -9,18 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rohitshukla001/lifeledger/internal/money"
 	"github.com/rohitshukla001/lifeledger/internal/store"
-)
-
-var (
-	categories = []store.Category{
-		store.CategoryBill, store.CategorySubscription, store.CategoryRenewal, store.CategoryWarranty,
-		store.CategoryDocument, store.CategoryDeadline, store.CategoryOther,
-	}
-	recurrences = []store.Recurrence{
-		store.RecurNone, store.RecurWeekly, store.RecurMonthly, store.RecurQuarterly, store.RecurYearly,
-	}
-	statuses = []store.Status{store.StatusOpen, store.StatusDone, store.StatusSnoozed, store.StatusCancelled}
 )
 
 const obligationFields = `
@@ -57,7 +47,7 @@ func (a *Agent) view(o store.Obligation) obligationView {
 		Notes:      o.Notes,
 	}
 	if o.AmountMinor != nil {
-		v.Amount = formatAmount(*o.AmountMinor)
+		v.Amount = money.Format(*o.AmountMinor)
 	}
 	if o.DueOn != nil {
 		v.DueOn = o.DueOn.Format(time.DateOnly)
@@ -91,19 +81,19 @@ func (in obligationInput) applyTo(o *store.Obligation, defaultCurrency string) e
 	}
 	if in.Category != nil {
 		o.Category = store.Category(*in.Category)
-		if !slices.Contains(categories, o.Category) {
+		if !slices.Contains(store.Categories, o.Category) {
 			return fmt.Errorf("unknown category %q", *in.Category)
 		}
 	}
 	if in.Recurrence != nil {
 		o.Recurrence = store.Recurrence(*in.Recurrence)
-		if !slices.Contains(recurrences, o.Recurrence) {
+		if !slices.Contains(store.Recurrences, o.Recurrence) {
 			return fmt.Errorf("unknown recurrence %q", *in.Recurrence)
 		}
 	}
 	if in.Status != nil {
 		o.Status = store.Status(*in.Status)
-		if !slices.Contains(statuses, o.Status) {
+		if !slices.Contains(store.Statuses, o.Status) {
 			return fmt.Errorf("unknown status %q", *in.Status)
 		}
 	}
@@ -112,7 +102,7 @@ func (in obligationInput) applyTo(o *store.Obligation, defaultCurrency string) e
 		if raw == "" {
 			o.AmountMinor = nil
 		} else {
-			minor, err := parseAmount(raw)
+			minor, err := money.Parse(raw)
 			if err != nil {
 				return err
 			}
@@ -214,7 +204,7 @@ func (a *Agent) listObligationsTool() Tool {
 				f.Statuses = []store.Status{store.StatusOpen, store.StatusSnoozed}
 			case "all":
 			default:
-				if !slices.Contains(statuses, store.Status(in.Status)) {
+				if !slices.Contains(store.Statuses, store.Status(in.Status)) {
 					return nil, fmt.Errorf("unknown status %q", in.Status)
 				}
 				f.Statuses = []store.Status{store.Status(in.Status)}

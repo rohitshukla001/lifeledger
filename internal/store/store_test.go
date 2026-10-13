@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -52,8 +53,8 @@ func TestOpenMigratesOnceAndReopens(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer s.Close()
-	if v, err := s.SchemaVersion(ctx); err != nil || v != 2 {
-		t.Fatalf("schema version = %d, %v; want 2", v, err)
+	if v, err := s.SchemaVersion(ctx); err != nil || v != 3 {
+		t.Fatalf("schema version = %d, %v; want 3", v, err)
 	}
 	var journal string
 	var foreignKeys int
@@ -72,13 +73,13 @@ func TestFailedMigrationIsRolledBack(t *testing.T) {
 	s := openTest(t)
 
 	bad := fstest.MapFS{
-		"migrations/0003_ok_then_broken.sql": {Data: []byte(`CREATE TABLE half (id INTEGER); INSERT INTO nope VALUES (1);`)},
+		"migrations/0004_ok_then_broken.sql": {Data: []byte(`CREATE TABLE half (id INTEGER); INSERT INTO nope VALUES (1);`)},
 	}
 	if err := migrate(ctx, s.db, bad); err == nil {
 		t.Fatal("want error from broken migration")
 	}
-	if v, _ := s.SchemaVersion(ctx); v != 2 {
-		t.Fatalf("schema version = %d, want 2", v)
+	if v, _ := s.SchemaVersion(ctx); v != 3 {
+		t.Fatalf("schema version = %d, want 3", v)
 	}
 	var n int
 	s.db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE name = 'half'`).Scan(&n)
@@ -404,5 +405,89 @@ func TestMemoryEmbeddings(t *testing.T) {
 func TestDecodeVectorRejectsTruncatedBlob(t *testing.T) {
 	if _, err := decodeVector([]byte{1, 2, 3}); err == nil {
 		t.Fatal("want error for 3-byte blob")
+	}
+}
+
+func TestIngestionAndProposals(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+
+	amount := int64(64900)
+	in := &Ingestion{SourceKind: "pdf", SourceName: "netflix.pdf", ContentHash: "abc", Summary: "Netflix receipt"}
+	props, err := s.CreateIngestion(ctx, in, []Proposal{
+		{Title: "Netflix", Category: CategorySubscription, AmountMinor: &amount, Currency: "INR", DueOn: date("2026-11-01"), Recurrence: RecurMonthly, Evidence: "Next billing date: 1 Nov", Confidence: 0.9},
+		{Title: "Card expiry", Category: CategoryDeadline, Recurrence: RecurNone, Confidence: 0.4},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.ID == 0 || props[0].ID == 0 || props[1].Status != ProposalPending || props[0].IngestionID != in.ID {
+		t.Fatalf("ingestion = %+v, proposals = %+v", in, props)
+	}
+
+	if got, err := s.IngestionByHash(ctx, "abc"); err != nil || got.ID != in.ID || got.SourceName != "netflix.pdf" {
+		t.Fatalf("by hash: %+v, %v", got, err)
+	}
+	if _, err := s.IngestionByHash(ctx, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing hash: %v", err)
+	}
+	if _, err := s.CreateIngestion(ctx, &Ingestion{SourceKind: "text", ContentHash: "abc"}, nil); err == nil {
+		t.Fatal("duplicate hash must be rejected")
+	}
+
+	o, err := s.AcceptProposal(ctx, props[0].ID, "ingest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Title != "Netflix" || *o.AmountMinor != amount || o.Status != StatusOpen || o.SourceRef != fmt.Sprintf("ingestion:%d", in.ID) {
+		t.Fatalf("obligation = %+v", o)
+	}
+	accepted, _ := s.GetProposal(ctx, props[0].ID)
+	if accepted.Status != ProposalAccepted || *accepted.ObligationID != o.ID || accepted.DecidedAt == nil {
+		t.Fatalf("accepted = %+v", accepted)
+	}
+	if _, err := s.AcceptProposal(ctx, props[0].ID, "ingest"); !errors.Is(err, ErrAlreadyDecided) {
+		t.Fatalf("second accept: %v", err)
+	}
+
+	if err := s.RejectProposal(ctx, props[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RejectProposal(ctx, props[1].ID); !errors.Is(err, ErrAlreadyDecided) {
+		t.Fatalf("second reject: %v", err)
+	}
+	if err := s.RejectProposal(ctx, 999); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("reject missing: %v", err)
+	}
+	if _, err := s.AcceptProposal(ctx, 999, "ingest"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("accept missing: %v", err)
+	}
+
+	pending, _ := s.ListProposals(ctx, ProposalFilter{Status: ProposalPending})
+	all, _ := s.ListProposals(ctx, ProposalFilter{IngestionID: in.ID})
+	if len(pending) != 0 || len(all) != 2 {
+		t.Fatalf("pending = %d, all = %d", len(pending), len(all))
+	}
+
+	if err := s.DeleteObligation(ctx, o.ID); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.GetProposal(ctx, props[0].ID); again.ObligationID != nil {
+		t.Fatal("deleting the obligation must clear the proposal link")
+	}
+}
+
+func TestCreateIngestionIsAtomic(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	_, err := s.CreateIngestion(ctx, &Ingestion{SourceKind: "text", ContentHash: "h"}, []Proposal{
+		{Title: "ok", Category: CategoryBill, Recurrence: RecurNone, Confidence: 1},
+		{Title: "bad", Category: "tax", Recurrence: RecurNone, Confidence: 1},
+	})
+	if err == nil {
+		t.Fatal("want error for bad proposal")
+	}
+	if _, err := s.IngestionByHash(ctx, "h"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("a failed ingestion must leave nothing behind")
 	}
 }

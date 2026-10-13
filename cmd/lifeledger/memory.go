@@ -156,7 +156,7 @@ func (a *app) printMemory(m store.Memory) {
 func (a *app) parseID(s string) (int64, bool) {
 	id, err := strconv.ParseInt(strings.TrimPrefix(s, "#"), 10, 64)
 	if err != nil || id <= 0 {
-		fmt.Fprintf(a.stderr, "invalid memory id %q\n", s)
+		fmt.Fprintf(a.stderr, "invalid id %q\n", s)
 		return 0, false
 	}
 	return id, true

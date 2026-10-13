@@ -180,11 +180,21 @@ func (c *Client) ListModels(ctx context.Context) ([]string, error) {
 }
 
 type chatRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Tools       []Tool    `json:"tools,omitempty"`
-	Temperature *float64  `json:"temperature,omitempty"`
-	MaxTokens   int       `json:"max_tokens,omitempty"`
+	Model          string          `json:"model"`
+	Messages       []Message       `json:"messages"`
+	Tools          []Tool          `json:"tools,omitempty"`
+	Temperature    *float64        `json:"temperature,omitempty"`
+	MaxTokens      int             `json:"max_tokens,omitempty"`
+	ResponseFormat *responseFormat `json:"response_format,omitempty"`
+}
+
+type responseFormat struct {
+	Type       string `json:"type"`
+	JSONSchema struct {
+		Name   string          `json:"name"`
+		Schema json.RawMessage `json:"schema"`
+		Strict bool            `json:"strict"`
+	} `json:"json_schema"`
 }
 
 type chatResponse struct {
@@ -200,13 +210,20 @@ func (c *Client) complete(ctx context.Context, model string, req Request) (*Resp
 	if err := c.budget.check(); err != nil {
 		return nil, err
 	}
-	body, err := json.Marshal(chatRequest{
+	payload := chatRequest{
 		Model:       model,
 		Messages:    req.Messages,
 		Tools:       req.Tools,
 		Temperature: req.Temperature,
 		MaxTokens:   req.MaxTokens,
-	})
+	}
+	if req.JSONSchema != nil {
+		payload.ResponseFormat = &responseFormat{Type: "json_schema"}
+		payload.ResponseFormat.JSONSchema.Name = req.JSONSchema.Name
+		payload.ResponseFormat.JSONSchema.Schema = req.JSONSchema.Schema
+		payload.ResponseFormat.JSONSchema.Strict = true
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("llm: encode request: %w", err)
 	}

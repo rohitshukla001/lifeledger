@@ -377,3 +377,22 @@ func TestEmbedRetriesServerErrors(t *testing.T) {
 		t.Fatalf("calls = %d, want 2", fake.embedCalls)
 	}
 }
+
+func TestChatSendsJSONSchema(t *testing.T) {
+	c, fake := newTestClient(t, func(int, chatRequest) (int, string) { return 200, okBody("{}") }, 0)
+	schema := json.RawMessage(`{"type":"object","properties":{"a":{"type":"string"}}}`)
+	if _, err := c.Chat(context.Background(), Request{Tier: Nano, Messages: []Message{User("x")}, JSONSchema: &JSONSchema{Name: "extract", Schema: schema}}); err != nil {
+		t.Fatal(err)
+	}
+	rf := fake.requests[0].ResponseFormat
+	if rf == nil || rf.Type != "json_schema" || rf.JSONSchema.Name != "extract" || !rf.JSONSchema.Strict || string(rf.JSONSchema.Schema) != string(schema) {
+		t.Fatalf("response_format = %+v", rf)
+	}
+
+	if _, err := c.Chat(context.Background(), Request{Tier: Nano, Messages: []Message{User("x")}}); err != nil {
+		t.Fatal(err)
+	}
+	if fake.requests[1].ResponseFormat != nil {
+		t.Fatal("response_format must be omitted without a schema")
+	}
+}

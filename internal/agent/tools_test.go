@@ -168,20 +168,3 @@ func TestRememberAndRecallTools(t *testing.T) {
 		t.Fatalf("recall = %v", out)
 	}
 }
-
-func TestParseAmount(t *testing.T) {
-	ok := map[string]int64{"0": 0, "12": 1200, "12.5": 1250, "1,234.56": 123456, ".75": 75, " 2 340 ": 234000, "99.": 9900}
-	for in, want := range ok {
-		if got, err := parseAmount(in); err != nil || got != want {
-			t.Errorf("parseAmount(%q) = %d, %v; want %d", in, got, err, want)
-		}
-	}
-	for _, in := range []string{"", "abc", "-1", "1.234", "1e5", "92233720368547758.08"} {
-		if _, err := parseAmount(in); err == nil {
-			t.Errorf("parseAmount(%q): want error", in)
-		}
-	}
-	if got := formatAmount(123405); got != "1234.05" {
-		t.Errorf("formatAmount = %q", got)
-	}
-}
