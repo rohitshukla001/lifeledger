@@ -74,7 +74,7 @@ func TestMemoryRejectsBadInput(t *testing.T) {
 	}{
 		{nil, 2, "usage"},
 		{[]string{"shout"}, 2, "unknown memory command"},
-		{[]string{"forget", "abc"}, 2, "invalid memory id"},
+		{[]string{"forget", "abc"}, 2, "invalid id"},
 		{[]string{"forget", "42"}, 1, "no memory with that id"},
 		{[]string{"edit", "1"}, 2, "usage"},
 		{[]string{"add", "-kind", "rumour", "x"}, 1, "store: add memory"},

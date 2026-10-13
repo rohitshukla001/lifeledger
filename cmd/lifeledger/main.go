@@ -29,6 +29,7 @@ Commands:
   ask [-tier T] PROMPT  Send one prompt to Nemotron (T is nano, super, or ultra).
   memory <command>      Add, list, recall, edit, or forget memories.
   chat [-c ID]          Talk to the LifeLedger agent in the terminal.
+  ingest <command>      Extract obligations from an email or PDF for review.
   version               Print the build version.
   help                  Show this help.
 
@@ -92,6 +93,8 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		return a.memory(ctx, fs.Args()[1:])
 	case "chat":
 		return a.chat(ctx, fs.Args()[1:])
+	case "ingest":
+		return a.ingest(ctx, fs.Args()[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", cmd)
 		fs.Usage()

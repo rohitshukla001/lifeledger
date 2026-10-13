@@ -43,8 +43,12 @@ func fakeTokenFactory(t *testing.T, catalog []string) {
 				Model string `json:"model"`
 			}
 			json.NewDecoder(r.Body).Decode(&req)
+			content := "pong from " + req.Model
+			if req.Model == "n" {
+				content = `{"summary": "Airtel invoice", "obligations": [{"title": "Airtel broadband", "category": "bill", "amount": "999", "currency": "INR", "due_on": "2026-11-15", "recurrence": "monthly", "notes": "", "evidence": "Pay by 15 Nov", "confidence": 0.9}]}`
+			}
 			json.NewEncoder(w).Encode(map[string]any{
-				"choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": "pong from " + req.Model}}},
+				"choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": content}}},
 				"usage":   map[string]int{"prompt_tokens": 12, "completion_tokens": 3},
 			})
 		default:
@@ -67,7 +71,7 @@ func TestAskPrintsReply(t *testing.T) {
 	if code := run([]string{"-env-file", "", "ask", "-tier", "nano", "ping"}, &out, &errOut); code != 0 {
 		t.Fatalf("exit code = %d, stderr = %s", code, errOut.String())
 	}
-	if got := strings.TrimSpace(out.String()); got != "pong from n" {
+	if got := strings.TrimSpace(out.String()); !strings.Contains(got, "Airtel broadband") {
 		t.Fatalf("stdout = %q", got)
 	}
 	if !strings.Contains(errOut.String(), "tokens=12/3") {
