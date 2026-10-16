@@ -168,3 +168,38 @@ func TestRememberAndRecallTools(t *testing.T) {
 		t.Fatalf("recall = %v", out)
 	}
 }
+
+func TestActionTools(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if _, err := runTool(t, f, "add_obligation", `{"title":"Airtel broadband","category":"bill","amount":"999","due_on":"2026-10-15","recurrence":"monthly"}`); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runTool(t, f, "mark_paid", `{"id":1}`)
+	if err != nil || out["status"] != "done" || out["result"] != "next due 2026-11-15" {
+		t.Fatalf("mark_paid = %v, %v", out, err)
+	}
+
+	out, err = runTool(t, f, "add_calendar_reminder", `{"id":1,"remind_days_before":2}`)
+	if err != nil || out["status"] != "done" || out["result"] != nil || !strings.Contains(out["note"].(string), "download it from action #2") {
+		t.Fatalf("calendar = %v, %v", out, err)
+	}
+
+	out, err = runTool(t, f, "draft_email", `{"to":"billing@airtel.example","subject":"Late fee","body":"Please waive it.","obligation_id":1}`)
+	if err != nil || out["status"] != "pending" || !strings.Contains(out["note"].(string), "action #3 waits for their approval") {
+		t.Fatalf("draft_email = %v, %v", out, err)
+	}
+
+	if _, err := runTool(t, f, "snooze_obligation", `{"id":1,"until":"2026-10-01"}`); err == nil || !strings.Contains(err.Error(), "after today") {
+		t.Fatalf("past snooze: %v", err)
+	}
+	if _, err := runTool(t, f, "mark_paid", `{}`); err == nil || !strings.Contains(err.Error(), "id is required") {
+		t.Fatalf("missing id: %v", err)
+	}
+
+	a, _ := f.store.GetAction(ctx, 3)
+	if a.RequestedBy != "agent" || a.SourceRef != "conversation:1" || *a.ObligationID != 1 {
+		t.Fatalf("action = %+v", a)
+	}
+}

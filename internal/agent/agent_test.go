@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/rohitshukla001/lifeledger/internal/actions"
 	"github.com/rohitshukla001/lifeledger/internal/llm"
 	"github.com/rohitshukla001/lifeledger/internal/memory"
 	"github.com/rohitshukla001/lifeledger/internal/store"
@@ -69,13 +70,15 @@ func newFixture(t *testing.T, script ...func(llm.Request) (*llm.Response, error)
 
 	fake := &scriptedLLM{script: script}
 	kolkata, _ := time.LoadLocation("Asia/Kolkata")
+	now := func() time.Time { return time.Date(2026, 10, 9, 20, 0, 0, 0, time.UTC) }
 	a := New(Options{
 		LLM:      fake,
 		Store:    s,
 		Memory:   memory.New(s, nil, nil),
+		Actions:  actions.New(actions.Options{Store: s, Location: kolkata, Now: now}),
 		Location: kolkata,
 		Currency: "INR",
-		Now:      func() time.Time { return time.Date(2026, 10, 9, 20, 0, 0, 0, time.UTC) },
+		Now:      now,
 	})
 	conv, err := a.StartConversation(context.Background(), "hello")
 	if err != nil {
@@ -107,7 +110,7 @@ func TestPlainReplyIsSavedWithContext(t *testing.T) {
 		!strings.Contains(system.Content, "Asia/Kolkata") || !strings.Contains(system.Content, "Default currency: INR") {
 		t.Fatalf("system prompt must carry the local date, time zone, and currency:\n%s", system.Content)
 	}
-	if req.Tier != llm.Super || len(req.Tools) != 5 {
+	if req.Tier != llm.Super || len(req.Tools) != 9 {
 		t.Fatalf("tier = %s, tools = %d", req.Tier, len(req.Tools))
 	}
 

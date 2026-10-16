@@ -12,7 +12,12 @@ LifeLedger is an entry in the Personal AI track of the [Nebius x NVIDIA Global A
 
 ## Key features
 
-- NVIDIA Nemotron 3 models (Nano, Super, and Ultra) on Nebius Token Factory, with tool calling.
+- A chat agent on NVIDIA Nemotron 3 Super that records and updates your obligations through tool calls and answers from stored data only.
+- Memory across conversations: each new conversation starts with the facts that are relevant to your message.
+- Document ingest: give it an email or a PDF bill, and Nemotron 3 Nano extracts the due dates and amounts as proposals that you accept or reject.
+- Actions: the agent marks bills paid (a recurring bill moves to its next due date), snoozes reminders, and makes calendar files at once. It drafts emails, but sends an email only after you approve it.
+- An audit log of each action: who asked for it, who approved it, and the result.
+- NVIDIA Nemotron 3 models (Nano, Super, and Ultra) on Nebius Token Factory.
 - Automatic retry and fallback to a smaller model when a model is unavailable.
 - A daily spend limit that stops model calls before the account runs out of credit.
 - Memory that you can see, edit, and delete. Recall finds memories by meaning (embeddings) and by keywords, and it still works without network access.
@@ -25,6 +30,20 @@ LifeLedger is an entry in the Personal AI track of the [Nebius x NVIDIA Global A
 Client ──HTTP──▶ lifeledger serve (Go) ──▶ internal/store ──▶ SQLite (data/lifeledger.db)
                    └── GET /healthz
 
+lifeledger ingest ──▶ internal/ingest ──▶ Nemotron 3 Nano (JSON Schema output)
+   (email, PDF)          │  validate, dedupe
+                         └──▶ proposals ──accept──▶ obligations
+
+lifeledger chat ──▶ internal/agent ──▶ Nemotron 3 Super (tool calls, up to 8 steps)
+                      │  tools: remember, recall, add_obligation, list_obligations,
+                      │         update_obligation, mark_paid, snooze_obligation,
+                      │         add_calendar_reminder, draft_email
+                      ├──▶ internal/memory
+                      ├──▶ internal/actions ──▶ policy: run now, or wait for approval
+                      │                      ├──▶ SMTP (approved emails only)
+                      │                      └──▶ audit log
+                      └──▶ internal/store
+
 lifeledger ask ──▶ internal/llm ──HTTPS──▶ Nebius Token Factory
                    (tiers, retry,          ├── Nemotron 3 Nano
                     fallback, budget)      ├── Nemotron 3 Super
@@ -36,11 +55,11 @@ lifeledger memory ──▶ internal/memory ──▶ internal/store ──▶ S
                        edit, forget)
 ```
 
-The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md).
+The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md). For the agent loop, see [ADR 0004](docs/adr/0004-agent-loop.md). For document ingest, see [ADR 0005](docs/adr/0005-document-ingest.md). For actions and approvals, see [ADR 0006](docs/adr/0006-actions-and-approvals.md).
 
 ## Prerequisites
 
-- Go 1.24 or later, with CGO enabled (the default).
+- Go 1.24.1 or later, with CGO enabled (the default).
 - A C compiler for the SQLite driver. On macOS, install the Xcode Command Line Tools with `xcode-select --install`.
 - GNU Make.
 - Git.
@@ -103,6 +122,8 @@ LifeLedger reads its settings from environment variables. It also reads a `.env`
 | `LIFELEDGER_ENV` | `dev` | `dev` gives text logs. `prod` gives JSON logs. |
 | `LIFELEDGER_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `LIFELEDGER_DB_PATH` | `data/lifeledger.db` | SQLite database file. LifeLedger makes the directory if it does not exist. |
+| `LIFELEDGER_TIMEZONE` | `UTC` | IANA time zone of the user, for example `Asia/Kolkata`. It sets the date "today" for the agent. |
+| `LIFELEDGER_CURRENCY` | `USD` | Default ISO 4217 currency for amounts without a currency, for example `INR`. |
 | `NEBIUS_API_KEY` | none | Token Factory API key. The model commands need it. |
 | `NEBIUS_BASE_URL` | `https://api.tokenfactory.nebius.com/v1/` | Token Factory endpoint. |
 | `LIFELEDGER_MODEL_NANO` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Model for fast, low-cost calls. |
@@ -110,6 +131,11 @@ LifeLedger reads its settings from environment variables. It also reads a `.env`
 | `LIFELEDGER_MODEL_ULTRA` | `nvidia/Nemotron-3-Ultra-550b-a55b` | Model for complex reasoning. |
 | `LIFELEDGER_MODEL_EMBED` | `Qwen/Qwen3-Embedding-8B` | Embedding model for memory recall. |
 | `LIFELEDGER_DAILY_BUDGET_USD` | `2` | Maximum model spend for each UTC day. `0` means no limit. |
+| `LIFELEDGER_SMTP_HOST` | none | SMTP server for approved emails. If it is empty, email is off. |
+| `LIFELEDGER_SMTP_PORT` | `587` | `587` uses STARTTLS. `465` uses TLS. |
+| `LIFELEDGER_SMTP_USERNAME` | none | SMTP user name. If it is empty, LifeLedger does not log in. |
+| `LIFELEDGER_SMTP_PASSWORD` | none | SMTP password. For Gmail, use an app password. |
+| `LIFELEDGER_SMTP_FROM` | none | Sender address, for example `Rohit <rohit@example.com>`. Necessary when `LIFELEDGER_SMTP_HOST` is set. |
 
 To use a different settings file, use the `-env-file` flag:
 
@@ -126,7 +152,7 @@ Do not put API keys or passwords in the repository. Keep them in `.env`. Git ign
 | `make run` | Build the binary and start the server. |
 | `make build` | Build the binary into `./bin`. |
 | `make test` | Run all tests with the race detector. These tests do not call Token Factory. |
-| `make test-live` | Run the tests that call Token Factory. They need `NEBIUS_API_KEY` in `.env` and cost a few cents. |
+| `make test-live` | Run the tests that call Token Factory, including a two-conversation agent test and an email ingest test. They need `NEBIUS_API_KEY` in `.env` and cost a few cents. |
 | `make check` | Run the format check, `go vet`, and the tests. Run it before each commit. |
 | `make help` | Show all targets. |
 
@@ -137,6 +163,18 @@ Binary commands:
 | `lifeledger serve` | Start the HTTP server. |
 | `lifeledger models` | Show the Token Factory catalog and check the configured models. |
 | `lifeledger ask [-tier nano\|super\|ultra] PROMPT` | Send one prompt to a Nemotron model. The default tier is `super`. |
+| `lifeledger chat [-c ID]` | Talk to the agent in the terminal. `-c` continues a conversation. Type `/new` for a new conversation, `/approve ID` or `/reject ID` to decide an action, and `/quit` to exit. |
+| `lifeledger actions` | Show the actions that wait for approval. |
+| `lifeledger actions list [-n N]` | Show recent actions. |
+| `lifeledger actions show ID` | Show one action with its payload and result. |
+| `lifeledger actions approve ID...` | Approve and run actions. |
+| `lifeledger actions reject ID...` | Reject actions. |
+| `lifeledger actions ics ID [-o FILE]` | Write the calendar file of a calendar action. |
+| `lifeledger audit [-n N]` | Show the audit log, oldest first. |
+| `lifeledger ingest add [-name NAME] FILE` | Extract obligations from an email, text, or PDF file as proposals. Use `-` to read from stdin. |
+| `lifeledger ingest pending` | Show the proposals that wait for a decision. |
+| `lifeledger ingest accept ID...` | Turn proposals into obligations. |
+| `lifeledger ingest reject ID...` | Discard proposals. |
 | `lifeledger memory add [-kind fact\|preference\|note] TEXT` | Save a memory. |
 | `lifeledger memory list` | Show all memories, newest first. |
 | `lifeledger memory recall [-n N] QUERY` | Show the memories that match a query, with a score. |
@@ -150,6 +188,10 @@ Binary commands:
 
 ```text
 cmd/lifeledger/     # Binary entry point and commands
+internal/actions/   # Actions: approval policy, executors, iCalendar, SMTP, audit
+internal/agent/     # Agent loop, system prompt, and tools
+internal/ingest/    # Email and PDF extraction into proposals
+internal/money/     # Amount parsing and formatting in minor units
 internal/config/    # Settings from environment variables and .env
 internal/llm/       # Token Factory client: chat, embeddings, retry, fallback, spend limit
 internal/memory/    # Memory engine: remember, recall, edit, forget, reindex
@@ -164,7 +206,7 @@ docs/adr/           # Architecture decision records
 | Problem | Cause | Solution |
 |---|---|---|
 | `address already in use` | A different process uses port 8080. | Set `LIFELEDGER_ADDR=:8081` in `.env`, or stop the other process. |
-| `go: go.mod requires go >= 1.24` | Your Go version is too old. | Install Go 1.24 or later. |
+| `go: go.mod requires go >= 1.24.1` | Your Go version is too old. | Install Go 1.24.1 or later. |
 | `go-sqlite3 requires cgo to work` | The binary was built with `CGO_ENABLED=0`. | Build with `CGO_ENABLED=1` and a C compiler installed. |
 | The first build or test run takes about one minute | Go compiles the SQLite C code one time. | Wait. Later builds use the build cache. |
 | `cannot open database` at startup | The directory of `LIFELEDGER_DB_PATH` cannot be written. | Set `LIFELEDGER_DB_PATH` to a path that you can write to. |
@@ -172,6 +214,14 @@ docs/adr/           # Architecture decision records
 | `using keyword matching only` | `NEBIUS_API_KEY` is not set. Recall cannot use embeddings. | Set `NEBIUS_API_KEY`, then run `lifeledger memory reindex`. |
 | `memory saved without embedding` in the log | The embedding call failed. The memory is saved. | Run `lifeledger memory reindex` when Token Factory is available. |
 | Recall misses memories after a change of `LIFELEDGER_MODEL_EMBED` | The stored embeddings are from the old model. | Run `lifeledger memory reindex`. |
+| The agent uses the wrong date for "today" or "tomorrow" | `LIFELEDGER_TIMEZONE` is not your time zone. | Set `LIFELEDGER_TIMEZONE`, for example `Asia/Kolkata`. |
+| `I could not finish that` | The model used all 8 tool steps without an answer. | Send a shorter request with one task in it. |
+| `the PDF may be a scanned image` | The PDF has no text layer. | Use a PDF with selectable text, or paste the text with `ingest add -`. |
+| `the model did not return valid JSON` | The extraction reply was not JSON. | Run the command again. If it fails again, set `LIFELEDGER_LOG_LEVEL=debug` and read the log. |
+| `already ingested as #N` | The same document was ingested before. | Use `ingest pending` to see its open proposals. |
+| `email is not configured` | An email was approved, but `LIFELEDGER_SMTP_HOST` is empty. | Set the SMTP settings, then ask the agent to draft the email again. |
+| `smtp auth: 535` | The SMTP user name or password is not correct. | Check the settings. For Gmail, make an app password. |
+| `action #N was already approved or rejected` | Each action can be decided one time only. | Use `actions list` to see its status. |
 | `config error: LIFELEDGER_ENV must be "dev" or "prod"` | A setting has a value that is not permitted. | Correct the value in `.env` or in the environment. |
 | Values in `.env` have no effect | You started the binary from a different directory. | Start it from the repository root, or use `-env-file`. |
 | `llm: NEBIUS_API_KEY is not set` | `.env` has no API key. | Set `NEBIUS_API_KEY` in `.env`. |
@@ -187,6 +237,9 @@ docs/adr/           # Architecture decision records
 - [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md): model tiers, fallback, and spend control.
 - [ADR 0002](docs/adr/0002-sqlite-storage.md): SQLite storage and migrations.
 - [ADR 0003](docs/adr/0003-memory-recall.md): memory recall with embeddings and keyword match.
+- [ADR 0004](docs/adr/0004-agent-loop.md): agent loop with tool calls.
+- [ADR 0005](docs/adr/0005-document-ingest.md): document ingest with proposals.
+- [ADR 0006](docs/adr/0006-actions-and-approvals.md): actions, approval policy, and audit log.
 - [Token Factory documentation](https://docs.tokenfactory.nebius.com/quickstart).
 
 ## License

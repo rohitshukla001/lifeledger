@@ -32,6 +32,12 @@ type Config struct {
 	ModelUltra     string
 	ModelEmbed     string
 	DailyBudgetUSD float64
+
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
 }
 
 func Load(envFile string) (Config, error) {
@@ -52,6 +58,10 @@ func Load(envFile string) (Config, error) {
 		ModelSuper:    getenv("LIFELEDGER_MODEL_SUPER", "nvidia/nemotron-3-super-120b-a12b"),
 		ModelUltra:    getenv("LIFELEDGER_MODEL_ULTRA", "nvidia/Nemotron-3-Ultra-550b-a55b"),
 		ModelEmbed:    getenv("LIFELEDGER_MODEL_EMBED", "Qwen/Qwen3-Embedding-8B"),
+		SMTPHost:      os.Getenv("LIFELEDGER_SMTP_HOST"),
+		SMTPUsername:  os.Getenv("LIFELEDGER_SMTP_USERNAME"),
+		SMTPPassword:  os.Getenv("LIFELEDGER_SMTP_PASSWORD"),
+		SMTPFrom:      os.Getenv("LIFELEDGER_SMTP_FROM"),
 	}
 
 	if port := os.Getenv("PORT"); port != "" && os.Getenv("LIFELEDGER_ADDR") == "" {
@@ -78,6 +88,15 @@ func Load(envFile string) (Config, error) {
 		errs = append(errs, fmt.Errorf("LIFELEDGER_DAILY_BUDGET_USD must be a number >= 0, got %q", os.Getenv("LIFELEDGER_DAILY_BUDGET_USD")))
 	}
 	cfg.DailyBudgetUSD = budget
+
+	port, err := strconv.Atoi(getenv("LIFELEDGER_SMTP_PORT", "587"))
+	if err != nil || port <= 0 || port > 65535 {
+		errs = append(errs, fmt.Errorf("LIFELEDGER_SMTP_PORT must be a TCP port, got %q", os.Getenv("LIFELEDGER_SMTP_PORT")))
+	}
+	cfg.SMTPPort = port
+	if cfg.SMTPHost != "" && cfg.SMTPFrom == "" {
+		errs = append(errs, errors.New("LIFELEDGER_SMTP_FROM is required when LIFELEDGER_SMTP_HOST is set"))
+	}
 	return cfg, errors.Join(errs...)
 }
 

@@ -33,10 +33,12 @@ func (a *app) chat(ctx context.Context, args []string) int {
 	}
 	defer db.Close()
 
+	acts := a.actionService(db)
 	bot := agent.New(agent.Options{
 		LLM:      client,
 		Store:    db,
 		Memory:   memory.New(db, client, a.log),
+		Actions:  acts,
 		Location: a.cfg.Location,
 		Currency: a.cfg.Currency,
 		Logger:   a.log,
@@ -54,7 +56,7 @@ func (a *app) chat(ctx context.Context, args []string) int {
 		}
 		fmt.Fprintf(a.stdout, "Continuing conversation #%d: %s\n", c.ID, c.Title)
 	}
-	fmt.Fprintln(a.stdout, "Type a message. /new starts a new conversation, /quit exits.")
+	fmt.Fprintln(a.stdout, "Type a message. /new starts a new conversation, /approve ID and /reject ID decide actions, /quit exits.")
 
 	in := bufio.NewScanner(a.stdin)
 	in.Buffer(make([]byte, 64<<10), 1<<20)
@@ -73,6 +75,12 @@ func (a *app) chat(ctx context.Context, args []string) int {
 		case "/new":
 			*convID = 0
 			fmt.Fprintln(a.stdout, "Started a new conversation.")
+			continue
+		}
+		if cmd, arg, ok := strings.Cut(line, " "); ok && (cmd == "/approve" || cmd == "/reject") {
+			if id, ok := a.parseID(strings.TrimSpace(arg)); ok {
+				a.decideAction(ctx, acts, strings.TrimPrefix(cmd, "/"), id)
+			}
 			continue
 		}
 

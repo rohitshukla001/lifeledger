@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rohitshukla001/lifeledger/internal/actions"
 	"github.com/rohitshukla001/lifeledger/internal/agent"
 	"github.com/rohitshukla001/lifeledger/internal/config"
 	"github.com/rohitshukla001/lifeledger/internal/llm"
@@ -28,7 +29,7 @@ func TestLiveAgentTracksAndRemembers(t *testing.T) {
 		APIKey:         cfg.NebiusAPIKey,
 		Models:         map[llm.Tier]string{llm.Nano: cfg.ModelNano, llm.Super: cfg.ModelSuper, llm.Ultra: cfg.ModelUltra},
 		EmbedModel:     cfg.ModelEmbed,
-		DailyBudgetUSD: 0.25,
+		DailyBudgetUSD: 0.40,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +42,14 @@ func TestLiveAgentTracksAndRemembers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	bot := agent.New(agent.Options{LLM: client, Store: db, Memory: memory.New(db, client, nil), Location: cfg.Location, Currency: "INR"})
+	bot := agent.New(agent.Options{
+		LLM:      client,
+		Store:    db,
+		Memory:   memory.New(db, client, nil),
+		Actions:  actions.New(actions.Options{Store: db, Location: cfg.Location}),
+		Location: cfg.Location,
+		Currency: "INR",
+	})
 
 	say := func(text string) *agent.Result {
 		t.Helper()
@@ -73,6 +81,18 @@ func TestLiveAgentTracksAndRemembers(t *testing.T) {
 	reply := strings.ToLower(second.Reply)
 	if !strings.Contains(reply, "march") && !strings.Contains(reply, "2027-03-15") {
 		t.Errorf("reply does not give the renewal date: %q", second.Reply)
+	}
+
+	say("I just paid the Acko car insurance premium.")
+	paid, _ := db.GetObligation(ctx, items[0].ID)
+	if paid.Status != store.StatusDone && (paid.DueOn == nil || paid.DueOn.Format(time.DateOnly) != "2028-03-15") {
+		t.Errorf("after payment the obligation must be done or move to 2028-03-15: %+v", paid)
+	}
+
+	say("Draft an email to renewals@acko.example asking them to send the renewal invoice.")
+	pending, _ := db.ListActions(ctx, store.ActionPending, 0)
+	if len(pending) != 1 || pending[0].Kind != actions.KindSendEmail {
+		t.Errorf("want one email waiting for approval, got %+v", pending)
 	}
 	t.Logf("total spend $%.5f", client.Budget().Spent())
 }

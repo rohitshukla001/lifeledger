@@ -53,8 +53,8 @@ func TestOpenMigratesOnceAndReopens(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer s.Close()
-	if v, err := s.SchemaVersion(ctx); err != nil || v != 3 {
-		t.Fatalf("schema version = %d, %v; want 3", v, err)
+	if v, err := s.SchemaVersion(ctx); err != nil || v != 4 {
+		t.Fatalf("schema version = %d, %v; want 4", v, err)
 	}
 	var journal string
 	var foreignKeys int
@@ -73,13 +73,13 @@ func TestFailedMigrationIsRolledBack(t *testing.T) {
 	s := openTest(t)
 
 	bad := fstest.MapFS{
-		"migrations/0004_ok_then_broken.sql": {Data: []byte(`CREATE TABLE half (id INTEGER); INSERT INTO nope VALUES (1);`)},
+		"migrations/0005_ok_then_broken.sql": {Data: []byte(`CREATE TABLE half (id INTEGER); INSERT INTO nope VALUES (1);`)},
 	}
 	if err := migrate(ctx, s.db, bad); err == nil {
 		t.Fatal("want error from broken migration")
 	}
-	if v, _ := s.SchemaVersion(ctx); v != 3 {
-		t.Fatalf("schema version = %d, want 3", v)
+	if v, _ := s.SchemaVersion(ctx); v != 4 {
+		t.Fatalf("schema version = %d, want 4", v)
 	}
 	var n int
 	s.db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE name = 'half'`).Scan(&n)
@@ -489,5 +489,80 @@ func TestCreateIngestionIsAtomic(t *testing.T) {
 	}
 	if _, err := s.IngestionByHash(ctx, "h"); !errors.Is(err, ErrNotFound) {
 		t.Fatal("a failed ingestion must leave nothing behind")
+	}
+}
+
+func TestActionLifecycle(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+
+	o := &Obligation{Title: "Rent"}
+	if err := s.CreateObligation(ctx, o); err != nil {
+		t.Fatal(err)
+	}
+	a := &Action{Kind: "send_email", ObligationID: &o.ID, Payload: `{"to":"a@b.c"}`, Summary: "Email a@b.c", RequestedBy: "agent", SourceRef: "conversation:1"}
+	if err := s.CreateAction(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	if a.ID == 0 || a.Status != ActionPending {
+		t.Fatalf("action = %+v", a)
+	}
+
+	if err := s.FinishAction(ctx, a.ID, "sent", nil); err == nil {
+		t.Fatal("a pending action must not finish before approval")
+	}
+	if err := s.DecideAction(ctx, a.ID, ActionApproved); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DecideAction(ctx, a.ID, ActionRejected); !errors.Is(err, ErrAlreadyDecided) {
+		t.Fatalf("second decision: %v", err)
+	}
+	if err := s.FinishAction(ctx, a.ID, "", errors.New("smtp: 535 auth failed")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishAction(ctx, a.ID, "", nil); err == nil {
+		t.Fatal("an action must finish only once")
+	}
+
+	got, err := s.GetAction(ctx, a.ID)
+	if err != nil || got.Status != ActionFailed || got.Error != "smtp: 535 auth failed" || got.DecidedAt == nil || got.ExecutedAt == nil || *got.ObligationID != o.ID {
+		t.Fatalf("got = %+v, %v", got, err)
+	}
+
+	if err := s.DecideAction(ctx, 404, ActionApproved); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("decide missing: %v", err)
+	}
+	if err := s.DecideAction(ctx, a.ID, ActionDone); err == nil {
+		t.Fatal("done is not a decision")
+	}
+	if err := s.CreateAction(ctx, &Action{Kind: "send_email", Payload: "{not json", Summary: "x", RequestedBy: "agent"}); err == nil {
+		t.Fatal("invalid JSON payload must be rejected")
+	}
+	if err := s.CreateAction(ctx, &Action{Kind: "wire_money", Payload: "{}", Summary: "x", RequestedBy: "agent"}); err == nil {
+		t.Fatal("unknown kind must be rejected")
+	}
+
+	second := &Action{Kind: "snooze", Payload: "{}", Summary: "Snooze", RequestedBy: "user"}
+	if err := s.CreateAction(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ := s.ListActions(ctx, ActionPending, 0)
+	all, _ := s.ListActions(ctx, "", 0)
+	if len(pending) != 1 || pending[0].ID != second.ID || len(all) != 2 || all[0].ID != second.ID {
+		t.Fatalf("pending = %+v, all = %+v", pending, all)
+	}
+}
+
+func TestAuditLog(t *testing.T) {
+	ctx := context.Background()
+	s := openTest(t)
+	for _, ev := range []string{"action.requested", "action.approved", "action.done"} {
+		if err := s.AddAudit(ctx, "user", ev, "action:1", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := s.ListAudit(ctx, 2)
+	if err != nil || len(entries) != 2 || entries[0].Event != "action.done" || entries[1].Event != "action.approved" {
+		t.Fatalf("entries = %+v, %v", entries, err)
 	}
 }

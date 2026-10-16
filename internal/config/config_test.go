@@ -89,6 +89,30 @@ func TestLoadTimezoneAndCurrency(t *testing.T) {
 	}
 }
 
+func TestLoadSMTP(t *testing.T) {
+	t.Setenv("LIFELEDGER_SMTP_HOST", "")
+	t.Setenv("LIFELEDGER_SMTP_PORT", "")
+	cfg, err := Load("")
+	if err != nil || cfg.SMTPHost != "" || cfg.SMTPPort != 587 {
+		t.Fatalf("defaults: %+v, %v", cfg, err)
+	}
+
+	t.Setenv("LIFELEDGER_SMTP_HOST", "smtp.example.com")
+	t.Setenv("LIFELEDGER_SMTP_FROM", "")
+	if _, err := Load(""); err == nil {
+		t.Fatal("a host without a sender must fail")
+	}
+	t.Setenv("LIFELEDGER_SMTP_FROM", "me@example.com")
+	t.Setenv("LIFELEDGER_SMTP_PORT", "smtp")
+	if _, err := Load(""); err == nil {
+		t.Fatal("a port that is not a number must fail")
+	}
+	t.Setenv("LIFELEDGER_SMTP_PORT", "465")
+	if cfg, err := Load(""); err != nil || cfg.SMTPPort != 465 || cfg.SMTPFrom != "me@example.com" {
+		t.Fatalf("custom: %+v, %v", cfg, err)
+	}
+}
+
 func TestLoadRejectsBadBudget(t *testing.T) {
 	for _, v := range []string{"-1", "lots"} {
 		t.Setenv("LIFELEDGER_DAILY_BUDGET_USD", v)

@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/rohitshukla001/lifeledger/internal/actions"
 	"github.com/rohitshukla001/lifeledger/internal/llm"
 	"github.com/rohitshukla001/lifeledger/internal/memory"
 	"github.com/rohitshukla001/lifeledger/internal/store"
@@ -31,6 +32,7 @@ type Options struct {
 	LLM      Chatter
 	Store    *store.Store
 	Memory   *memory.Engine
+	Actions  *actions.Service
 	Location *time.Location
 	Currency string
 	Logger   *slog.Logger
@@ -41,6 +43,7 @@ type Agent struct {
 	llm          Chatter
 	store        *store.Store
 	memory       *memory.Engine
+	actions      *actions.Service
 	loc          *time.Location
 	currency     string
 	log          *slog.Logger
@@ -70,6 +73,7 @@ func New(o Options) *Agent {
 		llm:          o.LLM,
 		store:        o.Store,
 		memory:       o.Memory,
+		actions:      o.Actions,
 		loc:          o.Location,
 		currency:     o.Currency,
 		log:          o.Logger,
@@ -86,13 +90,17 @@ func New(o Options) *Agent {
 	if a.now == nil {
 		a.now = time.Now
 	}
-	a.tools = newRegistry(
+	tools := []Tool{
 		a.rememberTool(),
 		a.recallTool(),
 		a.addObligationTool(),
 		a.listObligationsTool(),
 		a.updateObligationTool(),
-	)
+	}
+	if a.actions != nil {
+		tools = append(tools, a.actionTools()...)
+	}
+	a.tools = newRegistry(tools...)
 	return a
 }
 
@@ -200,6 +208,8 @@ Rules:
 - Use tools for facts about the user's obligations. Never guess a date or an amount.
 - When the user tells you a lasting fact or preference, save it with remember. Do not save small talk.
 - When the user mentions something that is due, renews, or expires, record it with add_obligation. Call list_obligations first so that you do not add a duplicate.
+- When the user says they paid something, use mark_paid. It moves a recurring item to its next due date.
+- You can draft emails with draft_email, but you never send them. The user approves each email first.
 - Use YYYY-MM-DD for dates in tool calls. Convert relative dates such as "next Friday" from today's date.
 - If a required detail is missing, ask one short question.
 - Keep replies short and concrete. Mention amounts with their currency.
