@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rohitshukla001/lifeledger/internal/store"
 )
 
 func runMemory(t *testing.T, args ...string) (int, string, string) {
@@ -85,5 +88,25 @@ func TestMemoryRejectsBadInput(t *testing.T) {
 		if code != c.code || !strings.Contains(errOut, c.msg) {
 			t.Errorf("%v: code %d, stderr %q; want %d and %q", c.args, code, errOut, c.code, c.msg)
 		}
+	}
+}
+
+func TestMemoryListShowsWebSource(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "ll.db")
+	t.Setenv("NEBIUS_API_KEY", "")
+	t.Setenv("LIFELEDGER_DB_PATH", dbPath)
+	db, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := store.Memory{Kind: store.MemoryFact, Content: "ITR deadline is 15 September 2026", Source: "web", SourceRef: "https://incometax.gov.in/due-dates"}
+	if err := db.AddMemory(context.Background(), &m); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	want := "#1 [fact] ITR deadline is 15 September 2026  (source: web https://incometax.gov.in/due-dates)\n"
+	if code, out, errOut := runMemory(t, "list"); code != 0 || out != want {
+		t.Fatalf("list: %d %q %q", code, out, errOut)
 	}
 }

@@ -113,6 +113,21 @@ func TestLoadSMTP(t *testing.T) {
 	}
 }
 
+func TestLoadTavily(t *testing.T) {
+	t.Setenv("TAVILY_API_KEY", "")
+	t.Setenv("TAVILY_BASE_URL", "")
+	cfg, err := Load("")
+	if err != nil || cfg.TavilyAPIKey != "" || cfg.TavilyBaseURL != "https://api.tavily.com" {
+		t.Fatalf("defaults: %+v, %v", cfg, err)
+	}
+
+	t.Setenv("TAVILY_API_KEY", "tvly-abc")
+	t.Setenv("TAVILY_BASE_URL", "http://localhost:9000")
+	if cfg, err := Load(""); err != nil || cfg.TavilyAPIKey != "tvly-abc" || cfg.TavilyBaseURL != "http://localhost:9000" {
+		t.Fatalf("custom: %+v, %v", cfg, err)
+	}
+}
+
 func TestLoadRejectsBadBudget(t *testing.T) {
 	for _, v := range []string{"-1", "lots"} {
 		t.Setenv("LIFELEDGER_DAILY_BUDGET_USD", v)

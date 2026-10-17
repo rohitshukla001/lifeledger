@@ -39,6 +39,7 @@ func (a *app) chat(ctx context.Context, args []string) int {
 		Store:    db,
 		Memory:   memory.New(db, client, a.log),
 		Actions:  acts,
+		Search:   a.searcher(),
 		Location: a.cfg.Location,
 		Currency: a.cfg.Currency,
 		Logger:   a.log,

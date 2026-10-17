@@ -33,6 +33,9 @@ type Config struct {
 	ModelEmbed     string
 	DailyBudgetUSD float64
 
+	TavilyAPIKey  string
+	TavilyBaseURL string
+
 	SMTPHost     string
 	SMTPPort     int
 	SMTPUsername string
@@ -58,6 +61,8 @@ func Load(envFile string) (Config, error) {
 		ModelSuper:    getenv("LIFELEDGER_MODEL_SUPER", "nvidia/nemotron-3-super-120b-a12b"),
 		ModelUltra:    getenv("LIFELEDGER_MODEL_ULTRA", "nvidia/Nemotron-3-Ultra-550b-a55b"),
 		ModelEmbed:    getenv("LIFELEDGER_MODEL_EMBED", "Qwen/Qwen3-Embedding-8B"),
+		TavilyAPIKey:  os.Getenv("TAVILY_API_KEY"),
+		TavilyBaseURL: getenv("TAVILY_BASE_URL", "https://api.tavily.com"),
 		SMTPHost:      os.Getenv("LIFELEDGER_SMTP_HOST"),
 		SMTPUsername:  os.Getenv("LIFELEDGER_SMTP_USERNAME"),
 		SMTPPassword:  os.Getenv("LIFELEDGER_SMTP_PASSWORD"),

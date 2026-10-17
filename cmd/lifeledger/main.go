@@ -32,6 +32,7 @@ Commands:
   ingest <command>      Extract obligations from an email or PDF for review.
   actions <command>     Review, approve, or reject actions.
   audit [-n N]          Show the audit log.
+  search [flags] QUERY  Search the web with Tavily and show cited sources.
   version               Print the build version.
   help                  Show this help.
 
@@ -101,6 +102,8 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		return a.actions(ctx, fs.Args()[1:])
 	case "audit":
 		return a.audit(ctx, fs.Args()[1:])
+	case "search":
+		return a.search(ctx, fs.Args()[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", cmd)
 		fs.Usage()

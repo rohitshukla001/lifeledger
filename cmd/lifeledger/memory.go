@@ -150,7 +150,11 @@ func (a *app) memoryForget(ctx context.Context, engine *memory.Engine, args []st
 }
 
 func (a *app) printMemory(m store.Memory) {
-	fmt.Fprintf(a.stdout, "#%d [%s] %s  (source: %s)\n", m.ID, m.Kind, m.Content, m.Source)
+	source := m.Source
+	if m.Source == "web" {
+		source += " " + m.SourceRef
+	}
+	fmt.Fprintf(a.stdout, "#%d [%s] %s  (source: %s)\n", m.ID, m.Kind, m.Content, source)
 }
 
 func (a *app) parseID(s string) (int64, bool) {
