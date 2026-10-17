@@ -50,6 +50,8 @@ func Open(ctx context.Context, path string) (*Store, error) {
 func (s *Store) Close() error                   { return s.db.Close() }
 func (s *Store) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 
+func (s *Store) SetClock(now func() time.Time) { s.now = now }
+
 func (s *Store) SchemaVersion(ctx context.Context) (int, error) {
 	var v int
 	err := s.db.QueryRowContext(ctx, `SELECT coalesce(max(version), 0) FROM schema_migrations`).Scan(&v)

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	_ "time/tzdata"
 
@@ -33,6 +34,8 @@ Commands:
   actions <command>     Review, approve, or reject actions.
   audit [-n N]          Show the audit log.
   search [flags] QUERY  Search the web with Tavily and show cited sources.
+  sweep [-review]       Run one sweep: wake snoozed items, remind, review, deliver.
+  notifications <cmd>   List reminders and reviews, or send a Telegram test.
   version               Print the build version.
   help                  Show this help.
 
@@ -104,6 +107,10 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		return a.audit(ctx, fs.Args()[1:])
 	case "search":
 		return a.search(ctx, fs.Args()[1:])
+	case "sweep":
+		return a.sweep(ctx, fs.Args()[1:])
+	case "notifications":
+		return a.notifications(ctx, fs.Args()[1:])
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", cmd)
 		fs.Usage()
@@ -130,6 +137,20 @@ func (a *app) serve(ctx context.Context) int {
 	defer db.Close()
 	if v, err := db.SchemaVersion(ctx); err == nil {
 		a.log.Info("database ready", "path", a.cfg.DBPath, "schema_version", v)
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	defer cancel()
+	if a.cfg.SweepInterval > 0 {
+		s := a.sweeper(db)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.Run(ctx, a.cfg.SweepInterval)
+		}()
+		a.log.Info("sweep started", "every", a.cfg.SweepInterval)
 	}
 
 	if err := server.New(a.cfg.Addr, a.log, db).Run(ctx); err != nil {

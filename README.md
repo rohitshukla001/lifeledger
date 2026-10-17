@@ -1,6 +1,6 @@
 # LifeLedger
 
-LifeLedger is a private life-admin agent. It keeps a record of your bills, renewals, warranties, documents, and deadlines. It reminds you before each due date. It acts for you, and you approve each high-risk action.
+LifeLedger is a private life-admin agent. It keeps a record of your bills, renewals, warranties, documents, and deadlines. It reminds you before each due date and sends you a weekly review. It acts for you, and you approve each high-risk action.
 
 ## Overview
 
@@ -17,6 +17,8 @@ LifeLedger is an entry in the Personal AI track of the [Nebius x NVIDIA Global A
 - Document ingest: give it an email or a PDF bill, and Nemotron 3 Nano extracts the due dates and amounts as proposals that you accept or reject.
 - Actions: the agent marks bills paid (a recurring bill moves to its next due date), snoozes reminders, and makes calendar files at once. It drafts emails, but sends an email only after you approve it.
 - Web research with Tavily: the agent finds current public facts, such as official deadlines and provider policies, gives the source URL for each fact, and can save a fact to memory with its source. It does not put your personal data in search queries.
+- An always-on sweep: it reminds you 7 days, 3 days, and 1 day before each due date, on the day, and when an item is overdue. It wakes snoozed items when the snooze ends. Each week, Nemotron 3 Ultra writes a short review of what is overdue, what is due next, and what waits for your approval.
+- Optional delivery to Telegram. Reminders that are due at the same time arrive as one message. LifeLedger tries a failed delivery again on the next sweep.
 - An audit log of each action: who asked for it, who approved it, and the result.
 - NVIDIA Nemotron 3 models (Nano, Super, and Ultra) on Nebius Token Factory.
 - Automatic retry and fallback to a smaller model when a model is unavailable.
@@ -46,6 +48,11 @@ lifeledger chat ──▶ internal/agent ──▶ Nemotron 3 Super (tool calls,
                       │                      └──▶ audit log
                       └──▶ internal/store
 
+lifeledger serve ──every 15 min──▶ internal/sweep ──▶ wake snoozed items
+lifeledger sweep                     │             ├──▶ reminders (7d, 3d, 1d, today, overdue)
+                                     │             └──▶ weekly review ──▶ Nemotron 3 Ultra
+                                     └──▶ notifications ──▶ internal/notify ──▶ Telegram (optional)
+
 lifeledger ask ──▶ internal/llm ──HTTPS──▶ Nebius Token Factory
                    (tiers, retry,          ├── Nemotron 3 Nano
                     fallback, budget)      ├── Nemotron 3 Super
@@ -57,7 +64,7 @@ lifeledger memory ──▶ internal/memory ──▶ internal/store ──▶ S
                        edit, forget)
 ```
 
-The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md). For the agent loop, see [ADR 0004](docs/adr/0004-agent-loop.md). For document ingest, see [ADR 0005](docs/adr/0005-document-ingest.md). For actions and approvals, see [ADR 0006](docs/adr/0006-actions-and-approvals.md). For web research, see [ADR 0007](docs/adr/0007-web-research.md).
+The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md). For the agent loop, see [ADR 0004](docs/adr/0004-agent-loop.md). For document ingest, see [ADR 0005](docs/adr/0005-document-ingest.md). For actions and approvals, see [ADR 0006](docs/adr/0006-actions-and-approvals.md). For web research, see [ADR 0007](docs/adr/0007-web-research.md). For the sweep and notifications, see [ADR 0008](docs/adr/0008-sweep-and-notifications.md).
 
 ## Prerequisites
 
@@ -67,6 +74,7 @@ The service is one Go binary. Each command of the binary is a separate entry poi
 - Git.
 - A Nebius Token Factory account and API key. Create the key at [tokenfactory.nebius.com](https://tokenfactory.nebius.com).
 - Optional: a Tavily API key for web research. Create the key at [app.tavily.com](https://app.tavily.com).
+- Optional: a Telegram bot for reminders on your phone. See step 7 of the local setup.
 
 ## Local setup
 
@@ -112,7 +120,19 @@ The service is one Go binary. Each command of the binary is a separate entry poi
    {"status":"ok","database":"ok","version":"dev (none)","uptime_seconds":0}
    ```
 
-   On the first start, LifeLedger makes the database file at `data/lifeledger.db`.
+   On the first start, LifeLedger makes the database file at `data/lifeledger.db`. The server also starts the sweep. It runs one time at startup and then every 15 minutes.
+
+7. Optional: to get reminders on Telegram, do these steps:
+
+   1. In Telegram, send `/newbot` to [@BotFather](https://t.me/BotFather) and copy the bot token.
+   2. Send a message to your new bot.
+   3. Open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and copy the value of `chat.id`.
+   4. Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env`.
+   5. Send a test message:
+
+      ```sh
+      ./bin/lifeledger notifications test
+      ```
 
 ## Configuration
 
@@ -136,6 +156,12 @@ LifeLedger reads its settings from environment variables. It also reads a `.env`
 | `LIFELEDGER_DAILY_BUDGET_USD` | `2` | Maximum model spend for each UTC day. `0` means no limit. |
 | `TAVILY_API_KEY` | none | Tavily API key. If it is empty, the agent has no `web_search` tool. |
 | `TAVILY_BASE_URL` | `https://api.tavily.com` | Tavily endpoint. |
+| `LIFELEDGER_SWEEP_INTERVAL` | `15m` | Time between two sweeps in `serve`. `0` turns the sweep off. The minimum is `1m`. |
+| `LIFELEDGER_REMIND_HOUR` | `9` | LifeLedger makes reminders only at or after this local hour (0 to 23). |
+| `LIFELEDGER_REVIEW_DAY` | `sunday` | Local weekday of the weekly review, or `off`. |
+| `LIFELEDGER_REVIEW_HOUR` | `18` | Local hour of the weekly review (0 to 23). |
+| `TELEGRAM_BOT_TOKEN` | none | Telegram bot token. If it is empty, reminders stay in the notification list only. |
+| `TELEGRAM_CHAT_ID` | none | Telegram chat that receives the messages. Necessary when `TELEGRAM_BOT_TOKEN` is set. |
 | `LIFELEDGER_SMTP_HOST` | none | SMTP server for approved emails. If it is empty, email is off. |
 | `LIFELEDGER_SMTP_PORT` | `587` | `587` uses STARTTLS. `465` uses TLS. |
 | `LIFELEDGER_SMTP_USERNAME` | none | SMTP user name. If it is empty, LifeLedger does not log in. |
@@ -157,7 +183,7 @@ Do not put API keys or passwords in the repository. Keep them in `.env`. Git ign
 | `make run` | Build the binary and start the server. |
 | `make build` | Build the binary into `./bin`. |
 | `make test` | Run all tests with the race detector. These tests do not call Token Factory. |
-| `make test-live` | Run the tests that call Token Factory and Tavily, including a two-conversation agent test, an email ingest test, and a web research test. They need `NEBIUS_API_KEY` in `.env` and cost a few cents. The Tavily tests use about 2 credits and skip if `TAVILY_API_KEY` is empty. |
+| `make test-live` | Run the tests that call Token Factory, Tavily, and Telegram, including a two-conversation agent test, an email ingest test, a web research test, and a weekly review on Ultra. They need `NEBIUS_API_KEY` in `.env` and cost a few cents. The Tavily tests use about 2 credits and skip if `TAVILY_API_KEY` is empty. The Telegram test sends one message and skips if `TELEGRAM_BOT_TOKEN` is empty. |
 | `make check` | Run the format check, `go vet`, and the tests. Run it before each commit. |
 | `make help` | Show all targets. |
 
@@ -165,7 +191,7 @@ Binary commands:
 
 | Command | Purpose |
 |---|---|
-| `lifeledger serve` | Start the HTTP server. |
+| `lifeledger serve` | Start the HTTP server and the sweep. |
 | `lifeledger models` | Show the Token Factory catalog and check the configured models. |
 | `lifeledger ask [-tier nano\|super\|ultra] PROMPT` | Send one prompt to a Nemotron model. The default tier is `super`. |
 | `lifeledger chat [-c ID]` | Talk to the agent in the terminal. `-c` continues a conversation. Type `/new` for a new conversation, `/approve ID` or `/reject ID` to decide an action, and `/quit` to exit. |
@@ -187,6 +213,9 @@ Binary commands:
 | `lifeledger memory forget ID` | Delete a memory permanently. |
 | `lifeledger memory reindex` | Make embeddings for the memories that have none. |
 | `lifeledger search [-topic T] [-range R] [-n N] [-site D] QUERY` | Search the web with Tavily and show the answer and the sources. `T` is `general`, `news`, or `finance`. `R` is `day`, `week`, `month`, or `year`. `D` is a comma-separated list of domains. |
+| `lifeledger sweep [-review]` | Run one sweep now and show what it did. `-review` also writes a weekly review now and shows it. Use it from a scheduled job when the server is not running. |
+| `lifeledger notifications [list [-n N]]` | Show recent reminders and reviews, with their delivery status. |
+| `lifeledger notifications test` | Send a test message to Telegram. |
 | `lifeledger version` | Show the build version. |
 | `lifeledger help` | Show the help text. |
 
@@ -198,6 +227,8 @@ internal/actions/   # Actions: approval policy, executors, iCalendar, SMTP, audi
 internal/agent/     # Agent loop, system prompt, and tools
 internal/ingest/    # Email and PDF extraction into proposals
 internal/money/     # Amount parsing and formatting in minor units
+internal/notify/    # Telegram delivery
+internal/sweep/     # Sweep: snooze wake-up, reminders, weekly review, delivery
 internal/config/    # Settings from environment variables and .env
 internal/llm/       # Token Factory client: chat, embeddings, retry, fallback, spend limit
 internal/memory/    # Memory engine: remember, recall, edit, forget, reindex
@@ -234,6 +265,12 @@ docs/adr/           # Architecture decision records
 | `tavily: API returned 432` or `433` | The Tavily plan or usage limit is reached. | Wait for the monthly reset, or change the plan. |
 | `search with public terms only` | The agent put a phone number, account number, or email address in a search query. LifeLedger stopped the query. | No action is necessary. The agent tries again without the personal data. |
 | `source_url must be a URL that web_search returned` | The agent tried to save a web fact with a source from a different conversation or no search. | Ask the agent to search again in the same conversation. |
+| No reminders arrive | The local time is before `LIFELEDGER_REMIND_HOUR`, the item is not `open`, or it has no due date. | Run `lifeledger notifications` to see the reminders that LifeLedger made. |
+| A reminder shows `not sent` | Telegram is not configured. | Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, then run `lifeledger notifications test`. |
+| `telegram: 400 Bad Request: chat not found` | `TELEGRAM_CHAT_ID` is not correct, or you did not send a message to the bot first. | Send a message to the bot, then get the chat ID again from `getUpdates`. |
+| `telegram: 401 Unauthorized` | The bot token is not correct. | Copy the token again from @BotFather. |
+| A reminder shows `failed 5x` | Delivery failed 5 times. LifeLedger does not try again. It also does not send reminders that are more than 24 hours old. | Correct the cause in the error message. New reminders are sent on the next sweep. |
+| The weekly review says `The model was not available` | The Ultra call and the fallbacks failed, or the daily spend limit was reached. | The review still lists your ledger. Read the log for the model error. |
 | `config error: LIFELEDGER_ENV must be "dev" or "prod"` | A setting has a value that is not permitted. | Correct the value in `.env` or in the environment. |
 | Values in `.env` have no effect | You started the binary from a different directory. | Start it from the repository root, or use `-env-file`. |
 | `llm: NEBIUS_API_KEY is not set` | `.env` has no API key. | Set `NEBIUS_API_KEY` in `.env`. |
@@ -253,8 +290,10 @@ docs/adr/           # Architecture decision records
 - [ADR 0005](docs/adr/0005-document-ingest.md): document ingest with proposals.
 - [ADR 0006](docs/adr/0006-actions-and-approvals.md): actions, approval policy, and audit log.
 - [ADR 0007](docs/adr/0007-web-research.md): web research with Tavily and cited memories.
+- [ADR 0008](docs/adr/0008-sweep-and-notifications.md): sweep, reminders, weekly review, and Telegram delivery.
 - [Token Factory documentation](https://docs.tokenfactory.nebius.com/quickstart).
 - [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).
+- [Telegram Bot API](https://core.telegram.org/bots/api#sendmessage).
 
 ## License
 

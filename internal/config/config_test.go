@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -197,5 +198,53 @@ func TestDotEnvBadLine(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("Load: want error for a line with no '=', got nil")
+	}
+}
+
+func TestLoadSweepDefaults(t *testing.T) {
+	for _, k := range []string{"LIFELEDGER_SWEEP_INTERVAL", "LIFELEDGER_REMIND_HOUR", "LIFELEDGER_REVIEW_DAY", "LIFELEDGER_REVIEW_HOUR", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"} {
+		t.Setenv(k, "")
+	}
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SweepInterval != 15*time.Minute || cfg.RemindHour != 9 || !cfg.ReviewEnabled || cfg.ReviewDay != time.Sunday || cfg.ReviewHour != 18 {
+		t.Fatalf("defaults: %+v", cfg)
+	}
+
+	t.Setenv("LIFELEDGER_SWEEP_INTERVAL", "0")
+	t.Setenv("LIFELEDGER_REMIND_HOUR", "8")
+	t.Setenv("LIFELEDGER_REVIEW_DAY", "Monday")
+	t.Setenv("LIFELEDGER_REVIEW_HOUR", "7")
+	t.Setenv("TELEGRAM_BOT_TOKEN", "123:ABC")
+	t.Setenv("TELEGRAM_CHAT_ID", "42")
+	cfg, err = Load("")
+	if err != nil || cfg.SweepInterval != 0 || cfg.RemindHour != 8 || cfg.ReviewDay != time.Monday || cfg.ReviewHour != 7 || cfg.TelegramChatID != "42" {
+		t.Fatalf("custom: %+v, %v", cfg, err)
+	}
+
+	t.Setenv("LIFELEDGER_REVIEW_DAY", "off")
+	if cfg, err = Load(""); err != nil || cfg.ReviewEnabled {
+		t.Fatalf("off: %+v, %v", cfg, err)
+	}
+}
+
+func TestLoadRejectsBadSweepSettings(t *testing.T) {
+	cases := []struct{ key, value, want string }{
+		{"LIFELEDGER_SWEEP_INTERVAL", "30s", "LIFELEDGER_SWEEP_INTERVAL"},
+		{"LIFELEDGER_REMIND_HOUR", "24", "LIFELEDGER_REMIND_HOUR"},
+		{"LIFELEDGER_REVIEW_HOUR", "evening", "LIFELEDGER_REVIEW_HOUR"},
+		{"LIFELEDGER_REVIEW_DAY", "someday", "LIFELEDGER_REVIEW_DAY"},
+		{"TELEGRAM_CHAT_ID", "42", "must be set together"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.key, func(t *testing.T) {
+			t.Setenv("TELEGRAM_BOT_TOKEN", "")
+			t.Setenv(tc.key, tc.value)
+			if _, err := Load(""); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("%s=%s: err = %v", tc.key, tc.value, err)
+			}
+		})
 	}
 }

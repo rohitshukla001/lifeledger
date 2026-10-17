@@ -36,6 +36,15 @@ type Config struct {
 	TavilyAPIKey  string
 	TavilyBaseURL string
 
+	SweepInterval time.Duration
+	RemindHour    int
+	ReviewEnabled bool
+	ReviewDay     time.Weekday
+	ReviewHour    int
+
+	TelegramBotToken string
+	TelegramChatID   string
+
 	SMTPHost     string
 	SMTPPort     int
 	SMTPUsername string
@@ -63,10 +72,13 @@ func Load(envFile string) (Config, error) {
 		ModelEmbed:    getenv("LIFELEDGER_MODEL_EMBED", "Qwen/Qwen3-Embedding-8B"),
 		TavilyAPIKey:  os.Getenv("TAVILY_API_KEY"),
 		TavilyBaseURL: getenv("TAVILY_BASE_URL", "https://api.tavily.com"),
-		SMTPHost:      os.Getenv("LIFELEDGER_SMTP_HOST"),
-		SMTPUsername:  os.Getenv("LIFELEDGER_SMTP_USERNAME"),
-		SMTPPassword:  os.Getenv("LIFELEDGER_SMTP_PASSWORD"),
-		SMTPFrom:      os.Getenv("LIFELEDGER_SMTP_FROM"),
+
+		TelegramBotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramChatID:   os.Getenv("TELEGRAM_CHAT_ID"),
+		SMTPHost:         os.Getenv("LIFELEDGER_SMTP_HOST"),
+		SMTPUsername:     os.Getenv("LIFELEDGER_SMTP_USERNAME"),
+		SMTPPassword:     os.Getenv("LIFELEDGER_SMTP_PASSWORD"),
+		SMTPFrom:         os.Getenv("LIFELEDGER_SMTP_FROM"),
 	}
 
 	if port := os.Getenv("PORT"); port != "" && os.Getenv("LIFELEDGER_ADDR") == "" {
@@ -102,7 +114,47 @@ func Load(envFile string) (Config, error) {
 	if cfg.SMTPHost != "" && cfg.SMTPFrom == "" {
 		errs = append(errs, errors.New("LIFELEDGER_SMTP_FROM is required when LIFELEDGER_SMTP_HOST is set"))
 	}
+
+	interval, err := time.ParseDuration(getenv("LIFELEDGER_SWEEP_INTERVAL", "15m"))
+	if err != nil || interval < 0 || (interval > 0 && interval < time.Minute) {
+		errs = append(errs, fmt.Errorf("LIFELEDGER_SWEEP_INTERVAL must be 0 or a duration of 1m or more, got %q", os.Getenv("LIFELEDGER_SWEEP_INTERVAL")))
+	}
+	cfg.SweepInterval = interval
+	if cfg.RemindHour, err = hour("LIFELEDGER_REMIND_HOUR", 9); err != nil {
+		errs = append(errs, err)
+	}
+	if cfg.ReviewHour, err = hour("LIFELEDGER_REVIEW_HOUR", 18); err != nil {
+		errs = append(errs, err)
+	}
+	day := strings.ToLower(getenv("LIFELEDGER_REVIEW_DAY", "sunday"))
+	if day != "off" {
+		cfg.ReviewEnabled = true
+		if cfg.ReviewDay, err = weekday(day); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if (cfg.TelegramBotToken == "") != (cfg.TelegramChatID == "") {
+		errs = append(errs, errors.New("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set together"))
+	}
 	return cfg, errors.Join(errs...)
+}
+
+func hour(key string, fallback int) (int, error) {
+	raw := getenv(key, strconv.Itoa(fallback))
+	h, err := strconv.Atoi(raw)
+	if err != nil || h < 0 || h > 23 {
+		return fallback, fmt.Errorf("%s must be an hour from 0 to 23, got %q", key, raw)
+	}
+	return h, nil
+}
+
+func weekday(name string) (time.Weekday, error) {
+	for d := time.Sunday; d <= time.Saturday; d++ {
+		if strings.EqualFold(d.String(), name) {
+			return d, nil
+		}
+	}
+	return time.Sunday, fmt.Errorf("LIFELEDGER_REVIEW_DAY must be a weekday name or \"off\", got %q", name)
 }
 
 func getenv(key, fallback string) string {

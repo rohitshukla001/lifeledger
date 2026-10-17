@@ -53,8 +53,8 @@ func TestOpenMigratesOnceAndReopens(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer s.Close()
-	if v, err := s.SchemaVersion(ctx); err != nil || v != 4 {
-		t.Fatalf("schema version = %d, %v; want 4", v, err)
+	if v, err := s.SchemaVersion(ctx); err != nil || v != 5 {
+		t.Fatalf("schema version = %d, %v; want 5", v, err)
 	}
 	var journal string
 	var foreignKeys int
@@ -73,13 +73,13 @@ func TestFailedMigrationIsRolledBack(t *testing.T) {
 	s := openTest(t)
 
 	bad := fstest.MapFS{
-		"migrations/0005_ok_then_broken.sql": {Data: []byte(`CREATE TABLE half (id INTEGER); INSERT INTO nope VALUES (1);`)},
+		"migrations/0006_ok_then_broken.sql": {Data: []byte(`CREATE TABLE half (id INTEGER); INSERT INTO nope VALUES (1);`)},
 	}
 	if err := migrate(ctx, s.db, bad); err == nil {
 		t.Fatal("want error from broken migration")
 	}
-	if v, _ := s.SchemaVersion(ctx); v != 4 {
-		t.Fatalf("schema version = %d, want 4", v)
+	if v, _ := s.SchemaVersion(ctx); v != 5 {
+		t.Fatalf("schema version = %d, want 5", v)
 	}
 	var n int
 	s.db.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE name = 'half'`).Scan(&n)
