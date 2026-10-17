@@ -16,6 +16,7 @@ LifeLedger is an entry in the Personal AI track of the [Nebius x NVIDIA Global A
 - Memory across conversations: each new conversation starts with the facts that are relevant to your message.
 - Document ingest: give it an email or a PDF bill, and Nemotron 3 Nano extracts the due dates and amounts as proposals that you accept or reject.
 - Actions: the agent marks bills paid (a recurring bill moves to its next due date), snoozes reminders, and makes calendar files at once. It drafts emails, but sends an email only after you approve it.
+- Web research with Tavily: the agent finds current public facts, such as official deadlines and provider policies, gives the source URL for each fact, and can save a fact to memory with its source. It does not put your personal data in search queries.
 - An audit log of each action: who asked for it, who approved it, and the result.
 - NVIDIA Nemotron 3 models (Nano, Super, and Ultra) on Nebius Token Factory.
 - Automatic retry and fallback to a smaller model when a model is unavailable.
@@ -37,7 +38,8 @@ lifeledger ingest ──▶ internal/ingest ──▶ Nemotron 3 Nano (JSON Sche
 lifeledger chat ──▶ internal/agent ──▶ Nemotron 3 Super (tool calls, up to 8 steps)
                       │  tools: remember, recall, add_obligation, list_obligations,
                       │         update_obligation, mark_paid, snooze_obligation,
-                      │         add_calendar_reminder, draft_email
+                      │         add_calendar_reminder, draft_email, web_search
+                      ├──▶ internal/tavily ──HTTPS──▶ Tavily Search API
                       ├──▶ internal/memory
                       ├──▶ internal/actions ──▶ policy: run now, or wait for approval
                       │                      ├──▶ SMTP (approved emails only)
@@ -55,7 +57,7 @@ lifeledger memory ──▶ internal/memory ──▶ internal/store ──▶ S
                        edit, forget)
 ```
 
-The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md). For the agent loop, see [ADR 0004](docs/adr/0004-agent-loop.md). For document ingest, see [ADR 0005](docs/adr/0005-document-ingest.md). For actions and approvals, see [ADR 0006](docs/adr/0006-actions-and-approvals.md).
+The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md). For the agent loop, see [ADR 0004](docs/adr/0004-agent-loop.md). For document ingest, see [ADR 0005](docs/adr/0005-document-ingest.md). For actions and approvals, see [ADR 0006](docs/adr/0006-actions-and-approvals.md). For web research, see [ADR 0007](docs/adr/0007-web-research.md).
 
 ## Prerequisites
 
@@ -64,6 +66,7 @@ The service is one Go binary. Each command of the binary is a separate entry poi
 - GNU Make.
 - Git.
 - A Nebius Token Factory account and API key. Create the key at [tokenfactory.nebius.com](https://tokenfactory.nebius.com).
+- Optional: a Tavily API key for web research. Create the key at [app.tavily.com](https://app.tavily.com).
 
 ## Local setup
 
@@ -80,7 +83,7 @@ The service is one Go binary. Each command of the binary is a separate entry poi
    cp .env.example .env
    ```
 
-3. Open `.env` and set `NEBIUS_API_KEY`.
+3. Open `.env` and set `NEBIUS_API_KEY`. To turn on web research, also set `TAVILY_API_KEY`.
 
 4. Make sure that the configured models are in the Token Factory catalog:
 
@@ -131,6 +134,8 @@ LifeLedger reads its settings from environment variables. It also reads a `.env`
 | `LIFELEDGER_MODEL_ULTRA` | `nvidia/Nemotron-3-Ultra-550b-a55b` | Model for complex reasoning. |
 | `LIFELEDGER_MODEL_EMBED` | `Qwen/Qwen3-Embedding-8B` | Embedding model for memory recall. |
 | `LIFELEDGER_DAILY_BUDGET_USD` | `2` | Maximum model spend for each UTC day. `0` means no limit. |
+| `TAVILY_API_KEY` | none | Tavily API key. If it is empty, the agent has no `web_search` tool. |
+| `TAVILY_BASE_URL` | `https://api.tavily.com` | Tavily endpoint. |
 | `LIFELEDGER_SMTP_HOST` | none | SMTP server for approved emails. If it is empty, email is off. |
 | `LIFELEDGER_SMTP_PORT` | `587` | `587` uses STARTTLS. `465` uses TLS. |
 | `LIFELEDGER_SMTP_USERNAME` | none | SMTP user name. If it is empty, LifeLedger does not log in. |
@@ -152,7 +157,7 @@ Do not put API keys or passwords in the repository. Keep them in `.env`. Git ign
 | `make run` | Build the binary and start the server. |
 | `make build` | Build the binary into `./bin`. |
 | `make test` | Run all tests with the race detector. These tests do not call Token Factory. |
-| `make test-live` | Run the tests that call Token Factory, including a two-conversation agent test and an email ingest test. They need `NEBIUS_API_KEY` in `.env` and cost a few cents. |
+| `make test-live` | Run the tests that call Token Factory and Tavily, including a two-conversation agent test, an email ingest test, and a web research test. They need `NEBIUS_API_KEY` in `.env` and cost a few cents. The Tavily tests use about 2 credits and skip if `TAVILY_API_KEY` is empty. |
 | `make check` | Run the format check, `go vet`, and the tests. Run it before each commit. |
 | `make help` | Show all targets. |
 
@@ -181,6 +186,7 @@ Binary commands:
 | `lifeledger memory edit ID TEXT` | Change the text of a memory. |
 | `lifeledger memory forget ID` | Delete a memory permanently. |
 | `lifeledger memory reindex` | Make embeddings for the memories that have none. |
+| `lifeledger search [-topic T] [-range R] [-n N] [-site D] QUERY` | Search the web with Tavily and show the answer and the sources. `T` is `general`, `news`, or `finance`. `R` is `day`, `week`, `month`, or `year`. `D` is a comma-separated list of domains. |
 | `lifeledger version` | Show the build version. |
 | `lifeledger help` | Show the help text. |
 
@@ -196,6 +202,7 @@ internal/config/    # Settings from environment variables and .env
 internal/llm/       # Token Factory client: chat, embeddings, retry, fallback, spend limit
 internal/memory/    # Memory engine: remember, recall, edit, forget, reindex
 internal/store/     # SQLite storage, repositories, and SQL migrations
+internal/tavily/    # Tavily Search API client with retry
 internal/server/    # HTTP server and routes
 internal/version/   # Build version, set at build time
 docs/adr/           # Architecture decision records
@@ -222,6 +229,11 @@ docs/adr/           # Architecture decision records
 | `email is not configured` | An email was approved, but `LIFELEDGER_SMTP_HOST` is empty. | Set the SMTP settings, then ask the agent to draft the email again. |
 | `smtp auth: 535` | The SMTP user name or password is not correct. | Check the settings. For Gmail, make an app password. |
 | `action #N was already approved or rejected` | Each action can be decided one time only. | Use `actions list` to see its status. |
+| `tavily: TAVILY_API_KEY is not set` | `.env` has no Tavily key. | Set `TAVILY_API_KEY` in `.env`. Chat works without it, but has no web research. |
+| `tavily: API returned 401` | The Tavily key is not correct. | Make a new key at app.tavily.com. |
+| `tavily: API returned 432` or `433` | The Tavily plan or usage limit is reached. | Wait for the monthly reset, or change the plan. |
+| `search with public terms only` | The agent put a phone number, account number, or email address in a search query. LifeLedger stopped the query. | No action is necessary. The agent tries again without the personal data. |
+| `source_url must be a URL that web_search returned` | The agent tried to save a web fact with a source from a different conversation or no search. | Ask the agent to search again in the same conversation. |
 | `config error: LIFELEDGER_ENV must be "dev" or "prod"` | A setting has a value that is not permitted. | Correct the value in `.env` or in the environment. |
 | Values in `.env` have no effect | You started the binary from a different directory. | Start it from the repository root, or use `-env-file`. |
 | `llm: NEBIUS_API_KEY is not set` | `.env` has no API key. | Set `NEBIUS_API_KEY` in `.env`. |
@@ -240,7 +252,9 @@ docs/adr/           # Architecture decision records
 - [ADR 0004](docs/adr/0004-agent-loop.md): agent loop with tool calls.
 - [ADR 0005](docs/adr/0005-document-ingest.md): document ingest with proposals.
 - [ADR 0006](docs/adr/0006-actions-and-approvals.md): actions, approval policy, and audit log.
+- [ADR 0007](docs/adr/0007-web-research.md): web research with Tavily and cited memories.
 - [Token Factory documentation](https://docs.tokenfactory.nebius.com/quickstart).
+- [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).
 
 ## License
 
