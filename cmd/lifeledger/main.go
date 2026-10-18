@@ -9,13 +9,10 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	_ "time/tzdata"
 
 	"github.com/rohitshukla001/lifeledger/internal/config"
-	"github.com/rohitshukla001/lifeledger/internal/server"
-	"github.com/rohitshukla001/lifeledger/internal/store"
 	"github.com/rohitshukla001/lifeledger/internal/version"
 )
 
@@ -124,40 +121,6 @@ type app struct {
 	stdin  io.Reader
 	stdout io.Writer
 	stderr io.Writer
-}
-
-func (a *app) serve(ctx context.Context) int {
-	a.log.Info("starting lifeledger", "version", version.String(), "env", a.cfg.Env)
-
-	db, err := store.Open(ctx, a.cfg.DBPath)
-	if err != nil {
-		a.log.Error("cannot open database", "path", a.cfg.DBPath, "err", err)
-		return 1
-	}
-	defer db.Close()
-	if v, err := db.SchemaVersion(ctx); err == nil {
-		a.log.Info("database ready", "path", a.cfg.DBPath, "schema_version", v)
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	defer cancel()
-	if a.cfg.SweepInterval > 0 {
-		s := a.sweeper(db)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			s.Run(ctx, a.cfg.SweepInterval)
-		}()
-		a.log.Info("sweep started", "every", a.cfg.SweepInterval)
-	}
-
-	if err := server.New(a.cfg.Addr, a.log, db).Run(ctx); err != nil {
-		a.log.Error("server stopped with error", "err", err)
-		return 1
-	}
-	return 0
 }
 
 func newLogger(cfg config.Config, w io.Writer) *slog.Logger {

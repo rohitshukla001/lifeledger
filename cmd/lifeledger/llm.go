@@ -25,6 +25,15 @@ func (a *app) llmClient() (*llm.Client, error) {
 	})
 }
 
+func (a *app) optionalLLM() *llm.Client {
+	client, err := a.llmClient()
+	if err != nil {
+		a.log.Warn("model features are off", "reason", err)
+		return nil
+	}
+	return client
+}
+
 func (a *app) models(ctx context.Context) int {
 	client, err := a.llmClient()
 	if err != nil {

@@ -25,13 +25,18 @@ LifeLedger is an entry in the Personal AI track of the [Nebius x NVIDIA Global A
 - A daily spend limit that stops model calls before the account runs out of credit.
 - Memory that you can see, edit, and delete. Recall finds memories by meaning (embeddings) and by keywords, and it still works without network access.
 - Local SQLite storage for obligations, memories, and conversations, with automatic schema migrations.
+- A JSON HTTP API for all features, protected by a bearer token. Chat can stream each tool call and the reply as server-sent events.
 - HTTP service with a health endpoint that also checks the database.
 
 ## Architecture
 
 ```text
-Client ──HTTP──▶ lifeledger serve (Go) ──▶ internal/store ──▶ SQLite (data/lifeledger.db)
-                   └── GET /healthz
+Client ──HTTP──▶ lifeledger serve (Go) ──▶ internal/server ──▶ GET /healthz
+                                              └──▶ internal/api (bearer token)
+                                                     ├──▶ /api/v1/chat (JSON or SSE) ──▶ internal/agent
+                                                     ├──▶ obligations, actions, memories, proposals,
+                                                     │    notifications, sweep, search
+                                                     └──▶ internal/store ──▶ SQLite (data/lifeledger.db)
 
 lifeledger ingest ──▶ internal/ingest ──▶ Nemotron 3 Nano (JSON Schema output)
    (email, PDF)          │  validate, dedupe
@@ -64,7 +69,7 @@ lifeledger memory ──▶ internal/memory ──▶ internal/store ──▶ S
                        edit, forget)
 ```
 
-The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md). For the agent loop, see [ADR 0004](docs/adr/0004-agent-loop.md). For document ingest, see [ADR 0005](docs/adr/0005-document-ingest.md). For actions and approvals, see [ADR 0006](docs/adr/0006-actions-and-approvals.md). For web research, see [ADR 0007](docs/adr/0007-web-research.md). For the sweep and notifications, see [ADR 0008](docs/adr/0008-sweep-and-notifications.md).
+The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md). For the agent loop, see [ADR 0004](docs/adr/0004-agent-loop.md). For document ingest, see [ADR 0005](docs/adr/0005-document-ingest.md). For actions and approvals, see [ADR 0006](docs/adr/0006-actions-and-approvals.md). For web research, see [ADR 0007](docs/adr/0007-web-research.md). For the sweep and notifications, see [ADR 0008](docs/adr/0008-sweep-and-notifications.md). For the HTTP API, see [ADR 0009](docs/adr/0009-http-api.md) and the [API reference](docs/api.md).
 
 ## Prerequisites
 
@@ -91,7 +96,7 @@ The service is one Go binary. Each command of the binary is a separate entry poi
    cp .env.example .env
    ```
 
-3. Open `.env` and set `NEBIUS_API_KEY`. To turn on web research, also set `TAVILY_API_KEY`.
+3. Open `.env` and set `NEBIUS_API_KEY`. Set `LIFELEDGER_API_TOKEN` to a long random value, for example the output of `openssl rand -hex 32`. To turn on web research, also set `TAVILY_API_KEY`.
 
 4. Make sure that the configured models are in the Token Factory catalog:
 
@@ -122,6 +127,12 @@ The service is one Go binary. Each command of the binary is a separate entry poi
 
    On the first start, LifeLedger makes the database file at `data/lifeledger.db`. The server also starts the sweep. It runs one time at startup and then every 15 minutes.
 
+   To send a request to the API, use the token from `.env`:
+
+   ```sh
+   curl -s -H "Authorization: Bearer $LIFELEDGER_API_TOKEN" localhost:8080/api/v1/overview
+   ```
+
 7. Optional: to get reminders on Telegram, do these steps:
 
    1. In Telegram, send `/newbot` to [@BotFather](https://t.me/BotFather) and copy the bot token.
@@ -142,6 +153,7 @@ LifeLedger reads its settings from environment variables. It also reads a `.env`
 |---|---|---|
 | `LIFELEDGER_ADDR` | `:8080` | HTTP listen address. If it is empty, LifeLedger uses `PORT`. |
 | `PORT` | none | Listen port that container hosts set. LifeLedger uses it only if `LIFELEDGER_ADDR` is empty. |
+| `LIFELEDGER_API_TOKEN` | none | Bearer token for `/api/v1`. It must have 24 or more characters. It is necessary when `LIFELEDGER_ENV` is `prod`. If it is empty in `dev`, the API accepts requests without a token. |
 | `LIFELEDGER_ENV` | `dev` | `dev` gives text logs. `prod` gives JSON logs. |
 | `LIFELEDGER_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `LIFELEDGER_DB_PATH` | `data/lifeledger.db` | SQLite database file. LifeLedger makes the directory if it does not exist. |
@@ -191,7 +203,7 @@ Binary commands:
 
 | Command | Purpose |
 |---|---|
-| `lifeledger serve` | Start the HTTP server and the sweep. |
+| `lifeledger serve` | Start the HTTP server, the API, and the sweep. |
 | `lifeledger models` | Show the Token Factory catalog and check the configured models. |
 | `lifeledger ask [-tier nano\|super\|ultra] PROMPT` | Send one prompt to a Nemotron model. The default tier is `super`. |
 | `lifeledger chat [-c ID]` | Talk to the agent in the terminal. `-c` continues a conversation. Type `/new` for a new conversation, `/approve ID` or `/reject ID` to decide an action, and `/quit` to exit. |
@@ -234,7 +246,9 @@ internal/llm/       # Token Factory client: chat, embeddings, retry, fallback, s
 internal/memory/    # Memory engine: remember, recall, edit, forget, reindex
 internal/store/     # SQLite storage, repositories, and SQL migrations
 internal/tavily/    # Tavily Search API client with retry
-internal/server/    # HTTP server and routes
+internal/api/       # HTTP API handlers, bearer token check, and chat streaming
+internal/ledger/    # Shared obligation validation, views, filters, and the invalid-input error
+internal/server/    # HTTP server, health endpoint, request log, and panic recovery
 internal/version/   # Build version, set at build time
 docs/adr/           # Architecture decision records
 ```
@@ -271,6 +285,11 @@ docs/adr/           # Architecture decision records
 | `telegram: 401 Unauthorized` | The bot token is not correct. | Copy the token again from @BotFather. |
 | A reminder shows `failed 5x` | Delivery failed 5 times. LifeLedger does not try again. It also does not send reminders that are more than 24 hours old. | Correct the cause in the error message. New reminders are sent on the next sweep. |
 | The weekly review says `The model was not available` | The Ultra call and the fallbacks failed, or the daily spend limit was reached. | The review still lists your ledger. Read the log for the model error. |
+| The API returns `401 unauthorized` | The request has no `Authorization: Bearer` header, or the token is not the same as `LIFELEDGER_API_TOKEN`. | Send the header with the token from `.env`. |
+| `LIFELEDGER_API_TOKEN is required when LIFELEDGER_ENV is prod` | The production server has no API token. | Set `LIFELEDGER_API_TOKEN` to 24 or more random characters. |
+| The API returns `503 not_configured` | A feature needs a key that is not set: `NEBIUS_API_KEY` for chat and ingest, `TAVILY_API_KEY` for search. | Set the key and restart the server. |
+| The API returns `409 conversation_busy` | The conversation answers another message now. | Wait for the first reply, then send the next message. |
+| A chat stream stops with no `reply` event | A proxy closed the connection. LifeLedger finishes the turn and saves it. | Read the conversation with `GET /api/v1/conversations/{id}`. |
 | `config error: LIFELEDGER_ENV must be "dev" or "prod"` | A setting has a value that is not permitted. | Correct the value in `.env` or in the environment. |
 | Values in `.env` have no effect | You started the binary from a different directory. | Start it from the repository root, or use `-env-file`. |
 | `llm: NEBIUS_API_KEY is not set` | `.env` has no API key. | Set `NEBIUS_API_KEY` in `.env`. |
@@ -291,6 +310,8 @@ docs/adr/           # Architecture decision records
 - [ADR 0006](docs/adr/0006-actions-and-approvals.md): actions, approval policy, and audit log.
 - [ADR 0007](docs/adr/0007-web-research.md): web research with Tavily and cited memories.
 - [ADR 0008](docs/adr/0008-sweep-and-notifications.md): sweep, reminders, weekly review, and Telegram delivery.
+- [ADR 0009](docs/adr/0009-http-api.md): HTTP API, bearer token, and chat streaming.
+- [API reference](docs/api.md): endpoints, error format, and chat events.
 - [Token Factory documentation](https://docs.tokenfactory.nebius.com/quickstart).
 - [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).
 - [Telegram Bot API](https://core.telegram.org/bots/api#sendmessage).

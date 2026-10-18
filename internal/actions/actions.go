@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/rohitshukla001/lifeledger/internal/ledger"
 	"github.com/rohitshukla001/lifeledger/internal/store"
 )
 
@@ -68,21 +69,21 @@ func NeedsApproval(kind string) bool {
 func (s *Service) Request(ctx context.Context, r Request) (store.Action, error) {
 	k, ok := kinds[r.Kind]
 	if !ok {
-		return store.Action{}, fmt.Errorf("unknown action %q", r.Kind)
+		return store.Action{}, ledger.Invalidf("unknown action %q", r.Kind)
 	}
 
 	var o *store.Obligation
 	if r.ObligationID != nil {
 		got, err := s.store.GetObligation(ctx, *r.ObligationID)
 		if errors.Is(err, store.ErrNotFound) {
-			return store.Action{}, fmt.Errorf("no obligation with id %d", *r.ObligationID)
+			return store.Action{}, ledger.Invalidf("no obligation with id %d", *r.ObligationID)
 		}
 		if err != nil {
 			return store.Action{}, err
 		}
 		o = &got
 	} else if k.needsObligation {
-		return store.Action{}, fmt.Errorf("%s needs an obligation id", r.Kind)
+		return store.Action{}, ledger.Invalidf("%s needs an obligation id", r.Kind)
 	}
 
 	raw := r.Payload
@@ -91,7 +92,7 @@ func (s *Service) Request(ctx context.Context, r Request) (store.Action, error) 
 	}
 	payload, summary, err := k.prepare(s, o, raw)
 	if err != nil {
-		return store.Action{}, err
+		return store.Action{}, ledger.Invalid(err)
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -182,6 +183,5 @@ func (s *Service) audit(ctx context.Context, actor, event string, actionID int64
 }
 
 func (s *Service) today() time.Time {
-	y, m, d := s.now().In(s.loc).Date()
-	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	return ledger.Today(s.now(), s.loc)
 }

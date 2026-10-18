@@ -27,6 +27,7 @@ const (
 var (
 	ErrUnauthorized  = errors.New("tavily: API key is missing or invalid")
 	ErrQuotaExceeded = errors.New("tavily: plan or usage limit exceeded")
+	ErrInvalidQuery  = errors.New("tavily: invalid query")
 )
 
 var (
@@ -152,25 +153,25 @@ func (q Query) normalize() (searchRequest, error) {
 		IncludeDomains: q.IncludeDomains,
 	}
 	if req.Query == "" {
-		return req, errors.New("tavily: query is empty")
+		return req, fmt.Errorf("%w: query is empty", ErrInvalidQuery)
 	}
 	if utf8.RuneCountInString(req.Query) > MaxQueryLen {
-		return req, fmt.Errorf("tavily: query is longer than %d characters", MaxQueryLen)
+		return req, fmt.Errorf("%w: query is longer than %d characters", ErrInvalidQuery, MaxQueryLen)
 	}
 	if req.Topic == "" {
 		req.Topic = "general"
 	}
 	if !slices.Contains(Topics, req.Topic) {
-		return req, fmt.Errorf("tavily: topic must be one of %s", strings.Join(Topics, ", "))
+		return req, fmt.Errorf("%w: topic must be one of %s", ErrInvalidQuery, strings.Join(Topics, ", "))
 	}
 	if req.TimeRange != "" && !slices.Contains(TimeRanges, req.TimeRange) {
-		return req, fmt.Errorf("tavily: time range must be one of %s", strings.Join(TimeRanges, ", "))
+		return req, fmt.Errorf("%w: time range must be one of %s", ErrInvalidQuery, strings.Join(TimeRanges, ", "))
 	}
 	if req.MaxResults == 0 {
 		req.MaxResults = 5
 	}
 	if req.MaxResults < 1 || req.MaxResults > MaxResults {
-		return req, fmt.Errorf("tavily: max results must be between 1 and %d", MaxResults)
+		return req, fmt.Errorf("%w: max results must be between 1 and %d", ErrInvalidQuery, MaxResults)
 	}
 	return req, nil
 }

@@ -107,7 +107,7 @@ func TestSearchValidatesQuery(t *testing.T) {
 		"between 1 and 20":          {Text: "q", MaxResults: 21},
 	}
 	for want, q := range cases {
-		if _, err := c.Search(context.Background(), q); err == nil || !strings.Contains(err.Error(), want) {
+		if _, err := c.Search(context.Background(), q); !errors.Is(err, ErrInvalidQuery) || !strings.Contains(err.Error(), want) {
 			t.Errorf("%+v: err = %v, want %q", q, err, want)
 		}
 	}

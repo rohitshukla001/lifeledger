@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rohitshukla001/lifeledger/internal/llm"
 	"github.com/rohitshukla001/lifeledger/internal/notify"
 	"github.com/rohitshukla001/lifeledger/internal/store"
 	"github.com/rohitshukla001/lifeledger/internal/sweep"
@@ -22,7 +23,7 @@ func (a *app) telegram() (*notify.Telegram, error) {
 	return notify.NewTelegram(notify.TelegramOptions{Token: a.cfg.TelegramBotToken, ChatID: a.cfg.TelegramChatID})
 }
 
-func (a *app) sweeper(db *store.Store) *sweep.Sweeper {
+func (a *app) sweeper(db *store.Store, client *llm.Client) *sweep.Sweeper {
 	opts := sweep.Options{
 		Store:      db,
 		Location:   a.cfg.Location,
@@ -33,10 +34,8 @@ func (a *app) sweeper(db *store.Store) *sweep.Sweeper {
 	if a.cfg.ReviewEnabled {
 		opts.Review = &sweep.Schedule{Day: a.cfg.ReviewDay, Hour: a.cfg.ReviewHour}
 	}
-	if client, err := a.llmClient(); err == nil {
+	if client != nil {
 		opts.LLM = client
-	} else {
-		a.log.Info("weekly reviews will list the ledger without a model summary", "reason", err)
 	}
 	if a.cfg.TelegramBotToken != "" {
 		tg, err := a.telegram()
@@ -62,7 +61,7 @@ func (a *app) sweep(ctx context.Context, args []string) int {
 		return 1
 	}
 	defer db.Close()
-	s := a.sweeper(db)
+	s := a.sweeper(db, a.optionalLLM())
 
 	if *review {
 		n, err := s.Review(ctx)

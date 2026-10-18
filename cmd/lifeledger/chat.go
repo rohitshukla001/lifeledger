@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rohitshukla001/lifeledger/internal/actions"
 	"github.com/rohitshukla001/lifeledger/internal/agent"
+	"github.com/rohitshukla001/lifeledger/internal/llm"
 	"github.com/rohitshukla001/lifeledger/internal/memory"
 	"github.com/rohitshukla001/lifeledger/internal/store"
 )
@@ -34,16 +36,7 @@ func (a *app) chat(ctx context.Context, args []string) int {
 	defer db.Close()
 
 	acts := a.actionService(db)
-	bot := agent.New(agent.Options{
-		LLM:      client,
-		Store:    db,
-		Memory:   memory.New(db, client, a.log),
-		Actions:  acts,
-		Search:   a.searcher(),
-		Location: a.cfg.Location,
-		Currency: a.cfg.Currency,
-		Logger:   a.log,
-	})
+	bot := a.newAgent(db, client, memory.New(db, client, a.log), acts)
 
 	if *convID != 0 {
 		c, err := db.GetConversation(ctx, *convID)
@@ -121,4 +114,17 @@ func (a *app) scanResult(err error) int {
 		return 1
 	}
 	return 0
+}
+
+func (a *app) newAgent(db *store.Store, client *llm.Client, mem *memory.Engine, acts *actions.Service) *agent.Agent {
+	return agent.New(agent.Options{
+		LLM:      client,
+		Store:    db,
+		Memory:   mem,
+		Actions:  acts,
+		Search:   a.searcher(),
+		Location: a.cfg.Location,
+		Currency: a.cfg.Currency,
+		Logger:   a.log,
+	})
 }
