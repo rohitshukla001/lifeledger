@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/rohitshukla001/lifeledger/internal/ledger"
 	"github.com/rohitshukla001/lifeledger/internal/llm"
 	"github.com/rohitshukla001/lifeledger/internal/money"
 	"github.com/rohitshukla001/lifeledger/internal/store"
@@ -32,6 +33,8 @@ const (
 )
 
 var ErrEmpty = errors.New("ingest: the document has no text")
+
+var ErrNoModel = errors.New("ingest: no model is configured; set NEBIUS_API_KEY")
 
 type Chatter interface {
 	Chat(ctx context.Context, req llm.Request) (*llm.Response, error)
@@ -83,7 +86,7 @@ func (s *Service) Text(ctx context.Context, name, text string) (*Result, error) 
 func (s *Service) PDF(ctx context.Context, name string, data []byte) (*Result, error) {
 	text, err := pdfText(data)
 	if err != nil {
-		return nil, err
+		return nil, ledger.Invalid(err)
 	}
 	return s.ingest(ctx, kindPDF, name, text)
 }
@@ -103,7 +106,7 @@ func (s *Service) Reject(ctx context.Context, proposalID int64) error {
 func (s *Service) ingest(ctx context.Context, kind, name, text string) (*Result, error) {
 	text = strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
 	if text == "" {
-		return nil, ErrEmpty
+		return nil, ledger.Invalid(ErrEmpty)
 	}
 	sum := sha256.Sum256([]byte(text))
 	hash := hex.EncodeToString(sum[:])
@@ -152,6 +155,9 @@ type extraction struct {
 }
 
 func (s *Service) extract(ctx context.Context, name, text string) (*extraction, error) {
+	if s.llm == nil {
+		return nil, ErrNoModel
+	}
 	zero := 0.0
 	req := llm.Request{
 		Tier:        llm.Nano,

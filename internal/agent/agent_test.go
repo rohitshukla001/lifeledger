@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/rohitshukla001/lifeledger/internal/actions"
+	"github.com/rohitshukla001/lifeledger/internal/ledger"
 	"github.com/rohitshukla001/lifeledger/internal/llm"
 	"github.com/rohitshukla001/lifeledger/internal/memory"
 	"github.com/rohitshukla001/lifeledger/internal/store"
@@ -152,7 +153,7 @@ func TestToolRoundTripCreatesObligation(t *testing.T) {
 			if last.Role != "tool" || last.ToolCallID != "call_add_obligation" {
 				t.Errorf("tool result not sent back: %+v", last)
 			}
-			var v obligationView
+			var v ledger.View
 			if err := json.Unmarshal([]byte(last.Content), &v); err != nil || v.Amount != "2340.50" || v.Currency != "INR" || *v.DaysUntilDue != 11 {
 				t.Errorf("tool result = %s", last.Content)
 			}
@@ -342,5 +343,24 @@ func TestWebMemoryShowsItsSourceInThePrompt(t *testing.T) {
 	f.reply(t, "When is the ITR filing deadline?")
 	if prompt := f.llm.requests[0].Messages[0].Content; !strings.Contains(prompt, "(memory #1, source: https://incometax.gov.in/due-dates)") {
 		t.Fatalf("prompt must cite the web source:\n%s", prompt)
+	}
+}
+
+func TestReplyStreamEmitsToolEvents(t *testing.T) {
+	f := newFixture(t,
+		callTool("list_obligations", `{}`),
+		say("Nothing is due."),
+	)
+	var events []Event
+	res, err := f.agent.ReplyStream(context.Background(), f.conv.ID, "what is due?", func(e Event) { events = append(events, e) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 || events[0].Kind != EventToolCall || events[0].Step.Result != "" ||
+		events[1].Kind != EventToolResult || events[1].Step.Name != "list_obligations" || !strings.Contains(events[1].Step.Result, `"obligations":[]`) {
+		t.Fatalf("events = %+v", events)
+	}
+	if res.Reply != "Nothing is due." {
+		t.Fatalf("reply = %q", res.Reply)
 	}
 }

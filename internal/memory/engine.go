@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/rohitshukla001/lifeledger/internal/ledger"
 	"github.com/rohitshukla001/lifeledger/internal/store"
 )
 
@@ -48,7 +49,7 @@ func New(s *store.Store, embedder Embedder, log *slog.Logger) *Engine {
 func (e *Engine) Remember(ctx context.Context, m store.Memory) (store.Memory, bool, error) {
 	m.Content = strings.TrimSpace(m.Content)
 	if m.Content == "" {
-		return store.Memory{}, false, errors.New("memory: content is empty")
+		return store.Memory{}, false, ledger.Invalidf("memory: content is empty")
 	}
 
 	existing, err := e.store.ListMemories(ctx, 0)
@@ -72,7 +73,7 @@ func (e *Engine) Remember(ctx context.Context, m store.Memory) (store.Memory, bo
 func (e *Engine) Edit(ctx context.Context, id int64, content string) (store.Memory, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {
-		return store.Memory{}, errors.New("memory: content is empty")
+		return store.Memory{}, ledger.Invalidf("memory: content is empty")
 	}
 	if err := e.store.UpdateMemoryContent(ctx, id, content); err != nil {
 		return store.Memory{}, err

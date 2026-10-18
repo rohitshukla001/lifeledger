@@ -166,6 +166,7 @@ LL_TEST_KEEP=from-file
 		os.Unsetenv(k)
 	}
 	t.Setenv("LL_TEST_KEEP", "from-process")
+	t.Setenv("LIFELEDGER_API_TOKEN", strings.Repeat("t", 32))
 
 	cfg, err := Load(path)
 	if err != nil {
@@ -246,5 +247,26 @@ func TestLoadRejectsBadSweepSettings(t *testing.T) {
 				t.Fatalf("%s=%s: err = %v", tc.key, tc.value, err)
 			}
 		})
+	}
+}
+
+func TestLoadAPIToken(t *testing.T) {
+	t.Setenv("LIFELEDGER_ENV", "dev")
+	t.Setenv("LIFELEDGER_API_TOKEN", "")
+	if cfg, err := Load(""); err != nil || cfg.APIToken != "" {
+		t.Fatalf("dev without a token: %+v, %v", cfg, err)
+	}
+
+	t.Setenv("LIFELEDGER_ENV", "prod")
+	if _, err := Load(""); err == nil || !strings.Contains(err.Error(), "LIFELEDGER_API_TOKEN is required") {
+		t.Fatalf("prod without a token: %v", err)
+	}
+	t.Setenv("LIFELEDGER_API_TOKEN", "short")
+	if _, err := Load(""); err == nil || !strings.Contains(err.Error(), "at least 24 characters") {
+		t.Fatalf("short token: %v", err)
+	}
+	t.Setenv("LIFELEDGER_API_TOKEN", strings.Repeat("k", 24))
+	if cfg, err := Load(""); err != nil || len(cfg.APIToken) != 24 {
+		t.Fatalf("valid token: %+v, %v", cfg, err)
 	}
 }

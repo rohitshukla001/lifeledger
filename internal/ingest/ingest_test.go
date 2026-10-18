@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rohitshukla001/lifeledger/internal/ledger"
 	"github.com/rohitshukla001/lifeledger/internal/llm"
 	"github.com/rohitshukla001/lifeledger/internal/store"
 )
@@ -230,5 +231,25 @@ func TestPDFIngestAndDecisions(t *testing.T) {
 	}
 	if items, _ := db.ListObligations(ctx, store.ObligationFilter{}); len(items) != 1 {
 		t.Fatalf("obligations = %d, want 1", len(items))
+	}
+}
+
+func TestIngestWithoutModel(t *testing.T) {
+	f := &fakeLLM{replies: []string{electricityJSON}}
+	svc, s := newService(t, f)
+	if _, err := svc.Text(context.Background(), "bill.txt", "Pay 2340.50 by 21 Oct"); err != nil {
+		t.Fatal(err)
+	}
+
+	offline := New(Options{Store: s, Currency: "INR"})
+	res, err := offline.Text(context.Background(), "bill.txt", "Pay 2340.50 by 21 Oct")
+	if err != nil || !res.Reused {
+		t.Fatalf("a known document must not need the model: %+v, %v", res, err)
+	}
+	if _, err := offline.Text(context.Background(), "new.txt", "Renew passport by 1 Dec"); !errors.Is(err, ErrNoModel) {
+		t.Fatalf("err = %v, want ErrNoModel", err)
+	}
+	if _, err := offline.Text(context.Background(), "empty.txt", " \n"); !errors.Is(err, ErrEmpty) || !errors.Is(err, ledger.ErrInvalid) {
+		t.Fatalf("err = %v, want an invalid ErrEmpty", err)
 	}
 }

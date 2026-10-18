@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"github.com/rohitshukla001/lifeledger/internal/version"
@@ -19,12 +20,13 @@ type Pinger interface {
 type Server struct {
 	log     *slog.Logger
 	db      Pinger
+	api     http.Handler
 	http    *http.Server
 	started time.Time
 }
 
-func New(addr string, log *slog.Logger, db Pinger) *Server {
-	s := &Server{log: log, db: db, started: time.Now()}
+func New(addr string, log *slog.Logger, db Pinger, api http.Handler) *Server {
+	s := &Server{log: log, db: db, api: api, started: time.Now()}
 	s.http = &http.Server{
 		Addr:              addr,
 		Handler:           s.Handler(),
@@ -39,7 +41,10 @@ func New(addr string, log *slog.Logger, db Pinger) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
-	return s.logRequests(mux)
+	if s.api != nil {
+		mux.Handle("/api/", s.api)
+	}
+	return s.logRequests(s.recoverPanics(mux))
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -120,16 +125,37 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
 func (s *Server) logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		s.log.Debug("http request",
+		level := slog.LevelInfo
+		if r.URL.Path == "/healthz" {
+			level = slog.LevelDebug
+		}
+		s.log.Log(r.Context(), level, "http request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rec.status,
 			"duration_ms", time.Since(start).Milliseconds(),
 		)
+	})
+}
+
+func (s *Server) recoverPanics(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if v := recover(); v != nil {
+				if v == http.ErrAbortHandler {
+					panic(v)
+				}
+				s.log.Error("panic in http handler", "method", r.Method, "path", r.URL.Path, "panic", v, "stack", string(debug.Stack()))
+				writeJSON(w, http.StatusInternalServerError, map[string]map[string]string{"error": {"code": "internal", "message": "internal error"}})
+			}
+		}()
+		next.ServeHTTP(w, r)
 	})
 }

@@ -15,10 +15,13 @@ import (
 const (
 	EnvDev  = "dev"
 	EnvProd = "prod"
+
+	minTokenLen = 24
 )
 
 type Config struct {
 	Addr     string
+	APIToken string
 	Env      string
 	LogLevel slog.Level
 	DBPath   string
@@ -61,6 +64,7 @@ func Load(envFile string) (Config, error) {
 
 	cfg := Config{
 		Addr:          getenv("LIFELEDGER_ADDR", ":8080"),
+		APIToken:      os.Getenv("LIFELEDGER_API_TOKEN"),
 		Env:           strings.ToLower(getenv("LIFELEDGER_ENV", EnvDev)),
 		DBPath:        getenv("LIFELEDGER_DB_PATH", "data/lifeledger.db"),
 		Currency:      strings.ToUpper(getenv("LIFELEDGER_CURRENCY", "USD")),
@@ -88,6 +92,12 @@ func Load(envFile string) (Config, error) {
 	var errs []error
 	if cfg.Env != EnvDev && cfg.Env != EnvProd {
 		errs = append(errs, fmt.Errorf("LIFELEDGER_ENV must be %q or %q, got %q", EnvDev, EnvProd, cfg.Env))
+	}
+	switch {
+	case cfg.APIToken == "" && cfg.Env == EnvProd:
+		errs = append(errs, errors.New("LIFELEDGER_API_TOKEN is required when LIFELEDGER_ENV is prod"))
+	case cfg.APIToken != "" && len(cfg.APIToken) < minTokenLen:
+		errs = append(errs, fmt.Errorf("LIFELEDGER_API_TOKEN must have at least %d characters", minTokenLen))
 	}
 	if err := cfg.LogLevel.UnmarshalText([]byte(getenv("LIFELEDGER_LOG_LEVEL", "info"))); err != nil {
 		errs = append(errs, fmt.Errorf("LIFELEDGER_LOG_LEVEL: %w", err))

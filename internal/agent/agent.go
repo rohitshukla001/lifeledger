@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/rohitshukla001/lifeledger/internal/actions"
+	"github.com/rohitshukla001/lifeledger/internal/ledger"
 	"github.com/rohitshukla001/lifeledger/internal/llm"
 	"github.com/rohitshukla001/lifeledger/internal/memory"
 	"github.com/rohitshukla001/lifeledger/internal/store"
@@ -61,6 +61,18 @@ type ToolStep struct {
 	Arguments string
 	Result    string
 	Failed    bool
+}
+
+type EventKind string
+
+const (
+	EventToolCall   EventKind = "tool_call"
+	EventToolResult EventKind = "tool_result"
+)
+
+type Event struct {
+	Kind EventKind
+	Step ToolStep
 }
 
 type Result struct {
@@ -120,9 +132,13 @@ func (a *Agent) StartConversation(ctx context.Context, firstMessage string) (sto
 }
 
 func (a *Agent) Reply(ctx context.Context, conversationID int64, text string) (*Result, error) {
+	return a.ReplyStream(ctx, conversationID, text, func(Event) {})
+}
+
+func (a *Agent) ReplyStream(ctx context.Context, conversationID int64, text string, emit func(Event)) (*Result, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return nil, errors.New("agent: message is empty")
+		return nil, ledger.Invalidf("agent: message is empty")
 	}
 	if _, err := a.store.GetConversation(ctx, conversationID); err != nil {
 		return nil, err
@@ -179,6 +195,7 @@ func (a *Agent) Reply(ctx context.Context, conversationID int64, text string) (*
 		turn = append(turn, msg)
 
 		for _, call := range msg.ToolCalls {
+			emit(Event{Kind: EventToolCall, Step: ToolStep{Name: call.Function.Name, Arguments: call.Function.Arguments}})
 			out, err := a.tools.run(ctx, conversationID, call.Function)
 			ts := ToolStep{Name: call.Function.Name, Arguments: call.Function.Arguments, Result: out}
 			if err != nil {
@@ -187,6 +204,7 @@ func (a *Agent) Reply(ctx context.Context, conversationID int64, text string) (*
 				ts.Result, ts.Failed = string(b), true
 			}
 			res.Steps = append(res.Steps, ts)
+			emit(Event{Kind: EventToolResult, Step: ts})
 			result := llm.ToolResult(call.ID, ts.Result)
 			msgs = append(msgs, result)
 			turn = append(turn, result)
@@ -200,8 +218,7 @@ func (a *Agent) Reply(ctx context.Context, conversationID int64, text string) (*
 }
 
 func (a *Agent) today() time.Time {
-	y, m, d := a.now().In(a.loc).Date()
-	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	return ledger.Today(a.now(), a.loc)
 }
 
 func (a *Agent) systemPrompt(ctx context.Context, userText string) llm.Message {
