@@ -25,14 +25,16 @@ LifeLedger is an entry in the Personal AI track of the [Nebius x NVIDIA Global A
 - A daily spend limit that stops model calls before the account runs out of credit.
 - Memory that you can see, edit, and delete. Recall finds memories by meaning (embeddings) and by keywords, and it still works without network access.
 - Local SQLite storage for obligations, memories, and conversations, with automatic schema migrations.
+- A web app (Angular) with seven views: Today, Chat (the agent's tool calls appear live), Ledger, Approvals, Import, Memory, and Activity. It works in light and dark mode and on a phone.
 - A JSON HTTP API for all features, protected by a bearer token. Chat can stream each tool call and the reply as server-sent events.
 - HTTP service with a health endpoint that also checks the database.
 
 ## Architecture
 
 ```text
-Client ──HTTP──▶ lifeledger serve (Go) ──▶ internal/server ──▶ GET /healthz
-                                              └──▶ internal/api (bearer token)
+Browser ──▶ Angular app (web/) ──HTTP──▶ lifeledger serve (Go) ──▶ internal/server ──▶ GET /healthz
+                                                                   ├──▶ / (web/dist/browser, CSP headers)
+                                                                   └──▶ internal/api (bearer token)
                                                      ├──▶ /api/v1/chat (JSON or SSE) ──▶ internal/agent
                                                      ├──▶ obligations, actions, memories, proposals,
                                                      │    notifications, sweep, search
@@ -69,12 +71,13 @@ lifeledger memory ──▶ internal/memory ──▶ internal/store ──▶ S
                        edit, forget)
 ```
 
-The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md). For the agent loop, see [ADR 0004](docs/adr/0004-agent-loop.md). For document ingest, see [ADR 0005](docs/adr/0005-document-ingest.md). For actions and approvals, see [ADR 0006](docs/adr/0006-actions-and-approvals.md). For web research, see [ADR 0007](docs/adr/0007-web-research.md). For the sweep and notifications, see [ADR 0008](docs/adr/0008-sweep-and-notifications.md). For the HTTP API, see [ADR 0009](docs/adr/0009-http-api.md) and the [API reference](docs/api.md).
+The service is one Go binary. Each command of the binary is a separate entry point. For the model tier decisions, see [ADR 0001](docs/adr/0001-model-tiers-and-spend-control.md). For the storage decisions, see [ADR 0002](docs/adr/0002-sqlite-storage.md). For memory recall, see [ADR 0003](docs/adr/0003-memory-recall.md). For the agent loop, see [ADR 0004](docs/adr/0004-agent-loop.md). For document ingest, see [ADR 0005](docs/adr/0005-document-ingest.md). For actions and approvals, see [ADR 0006](docs/adr/0006-actions-and-approvals.md). For web research, see [ADR 0007](docs/adr/0007-web-research.md). For the sweep and notifications, see [ADR 0008](docs/adr/0008-sweep-and-notifications.md). For the HTTP API, see [ADR 0009](docs/adr/0009-http-api.md) and the [API reference](docs/api.md). For the web app, see [ADR 0010](docs/adr/0010-web-app.md).
 
 ## Prerequisites
 
 - Go 1.24.1 or later, with CGO enabled (the default).
 - A C compiler for the SQLite driver. On macOS, install the Xcode Command Line Tools with `xcode-select --install`.
+- Node.js 22.22.3 or later (or 24.15 or later), with npm, for the web app.
 - GNU Make.
 - Git.
 - A Nebius Token Factory account and API key. Create the key at [tokenfactory.nebius.com](https://tokenfactory.nebius.com).
@@ -107,11 +110,15 @@ The service is one Go binary. Each command of the binary is a separate entry poi
 
    The command marks each configured model with `*`. If a configured model is not in the catalog, the command shows an error.
 
-5. Build the binary and start the server:
+5. Build the web app, then build the binary and start the server:
 
    ```sh
+   make web-install
+   make web
    make run
    ```
+
+   Open http://localhost:8080 and enter the value of `LIFELEDGER_API_TOKEN`. The browser keeps the token until you click **Lock**.
 
 6. In a second terminal, send a request to the health endpoint:
 
@@ -154,6 +161,7 @@ LifeLedger reads its settings from environment variables. It also reads a `.env`
 | `LIFELEDGER_ADDR` | `:8080` | HTTP listen address. If it is empty, LifeLedger uses `PORT`. |
 | `PORT` | none | Listen port that container hosts set. LifeLedger uses it only if `LIFELEDGER_ADDR` is empty. |
 | `LIFELEDGER_API_TOKEN` | none | Bearer token for `/api/v1`. It must have 24 or more characters. It is necessary when `LIFELEDGER_ENV` is `prod`. If it is empty in `dev`, the API accepts requests without a token. |
+| `LIFELEDGER_WEB_DIR` | `web/dist/browser` | Directory of the built web app. If it has no `index.html`, the server runs without the web app. |
 | `LIFELEDGER_ENV` | `dev` | `dev` gives text logs. `prod` gives JSON logs. |
 | `LIFELEDGER_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `LIFELEDGER_DB_PATH` | `data/lifeledger.db` | SQLite database file. LifeLedger makes the directory if it does not exist. |
@@ -196,7 +204,12 @@ Do not put API keys or passwords in the repository. Keep them in `.env`. Git ign
 | `make build` | Build the binary into `./bin`. |
 | `make test` | Run all tests with the race detector. These tests do not call Token Factory. |
 | `make test-live` | Run the tests that call Token Factory, Tavily, and Telegram, including a two-conversation agent test, an email ingest test, a web research test, and a weekly review on Ultra. They need `NEBIUS_API_KEY` in `.env` and cost a few cents. The Tavily tests use about 2 credits and skip if `TAVILY_API_KEY` is empty. The Telegram test sends one message and skips if `TELEGRAM_BOT_TOKEN` is empty. |
-| `make check` | Run the format check, `go vet`, and the tests. Run it before each commit. |
+| `make check` | Run the Go format check, `go vet`, and the Go tests. Run it before each commit. |
+| `make web-install` | Install the web app dependencies from `web/package-lock.json`. |
+| `make web` | Build the web app into `web/dist/browser`. The server serves it at `/`. |
+| `make web-dev` | Start the Angular dev server on http://localhost:4200. It sends `/api` to the server on port 8080, so start `make run` first. |
+| `make web-test` | Run the web app unit tests (Vitest). |
+| `make web-check` | Run the Prettier check, the web app tests, and the production build. Run it before each commit that changes `web/`. |
 | `make help` | Show all targets. |
 
 Binary commands:
@@ -250,6 +263,7 @@ internal/api/       # HTTP API handlers, bearer token check, and chat streaming
 internal/ledger/    # Shared obligation validation, views, filters, and the invalid-input error
 internal/server/    # HTTP server, health endpoint, request log, and panic recovery
 internal/version/   # Build version, set at build time
+web/                # Angular web app: core services, pages, shared components, unit tests
 docs/adr/           # Architecture decision records
 ```
 
@@ -285,6 +299,9 @@ docs/adr/           # Architecture decision records
 | `telegram: 401 Unauthorized` | The bot token is not correct. | Copy the token again from @BotFather. |
 | A reminder shows `failed 5x` | Delivery failed 5 times. LifeLedger does not try again. It also does not send reminders that are more than 24 hours old. | Correct the cause in the error message. New reminders are sent on the next sweep. |
 | The weekly review says `The model was not available` | The Ultra call and the fallbacks failed, or the daily spend limit was reached. | The review still lists your ledger. Read the log for the model error. |
+| `web UI is off` in the server log | `web/dist/browser/index.html` does not exist. | Run `make web-install` and `make web`, or set `LIFELEDGER_WEB_DIR`. |
+| `The Angular CLI requires a minimum Node.js version` | Node.js is too old. | Install Node.js 22.22.3 or later, or 24.15 or later. |
+| The web app asks for the token again | The server did not accept the saved token, for example after a change of `LIFELEDGER_API_TOKEN`. | Enter the new token. |
 | The API returns `401 unauthorized` | The request has no `Authorization: Bearer` header, or the token is not the same as `LIFELEDGER_API_TOKEN`. | Send the header with the token from `.env`. |
 | `LIFELEDGER_API_TOKEN is required when LIFELEDGER_ENV is prod` | The production server has no API token. | Set `LIFELEDGER_API_TOKEN` to 24 or more random characters. |
 | The API returns `503 not_configured` | A feature needs a key that is not set: `NEBIUS_API_KEY` for chat and ingest, `TAVILY_API_KEY` for search. | Set the key and restart the server. |
@@ -311,6 +328,7 @@ docs/adr/           # Architecture decision records
 - [ADR 0007](docs/adr/0007-web-research.md): web research with Tavily and cited memories.
 - [ADR 0008](docs/adr/0008-sweep-and-notifications.md): sweep, reminders, weekly review, and Telegram delivery.
 - [ADR 0009](docs/adr/0009-http-api.md): HTTP API, bearer token, and chat streaming.
+- [ADR 0010](docs/adr/0010-web-app.md): Angular web app.
 - [API reference](docs/api.md): endpoints, error format, and chat events.
 - [Token Factory documentation](https://docs.tokenfactory.nebius.com/quickstart).
 - [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).

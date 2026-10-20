@@ -62,7 +62,12 @@ func (a *app) serve(ctx context.Context) int {
 		a.log.Info("sweep started", "every", a.cfg.SweepInterval)
 	}
 
-	if err := server.New(a.cfg.Addr, a.log, db, api.New(opts)).Run(ctx); err != nil {
+	site, err := server.Site(a.cfg.WebDir)
+	if err != nil {
+		a.log.Info("web UI is off; build it with make web", "reason", err)
+	}
+	srv := server.New(server.Options{Addr: a.cfg.Addr, Logger: a.log, DB: db, API: api.New(opts), Site: site})
+	if err := srv.Run(ctx); err != nil {
 		a.log.Error("server stopped with error", "err", err)
 		return 1
 	}
