@@ -1,0 +1,45 @@
+<div class="frame">
+  <aside class="rail">
+    <a class="brand" routerLink="/today">
+      <span class="mark" aria-hidden="true"></span>
+      <span class="name">Life<em>Ledger</em></span>
+    </a>
+    <nav aria-label="Main">
+      @for (item of nav; track item.path) {
+        <a
+          [routerLink]="item.path"
+          routerLinkActive="active"
+          #rla="routerLinkActive"
+          [attr.aria-current]="rla.isActive ? 'page' : null"
+        >
+          <ll-icon class="glyph" [name]="item.icon" />
+          <span class="label">{{ item.label }}</span>
+          @if (badge(item.path); as count) {
+            <span class="badge" [class.alert]="item.path === '/today'">{{ count }}</span>
+          }
+        </a>
+      }
+    </nav>
+    <div class="foot">
+      @if (overview(); as o) {
+        <p class="today mono">{{ o.today }}</p>
+      }
+      <button class="btn ghost small lock" type="button" (click)="lock()">Lock</button>
+    </div>
+  </aside>
+  <main class="sheet">
+    <router-outlet />
+  </main>
+</div>
+<div class="toasts" aria-live="polite">
+  @for (n of notices.items(); track n.id) {
+    <button
+      type="button"
+      class="toast"
+      [class.error]="n.tone === 'error'"
+      (click)="notices.dismiss(n.id)"
+    >
+      {{ n.text }}
+    </button>
+  }
+</div>

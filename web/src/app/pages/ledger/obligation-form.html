@@ -1,0 +1,104 @@
+<form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <header>
+    <p class="eyebrow">{{ obligation() ? 'Item #' + obligation()!.id : 'New entry' }}</p>
+    <h2>{{ obligation() ? 'Edit item' : 'Add to the ledger' }}</h2>
+  </header>
+
+  <label class="field">
+    Title
+    <input class="input" formControlName="title" placeholder="Electricity bill" />
+    @if (invalid('title')) {
+      <span class="invalid">A title is required.</span>
+    }
+  </label>
+
+  <div class="row">
+    <label class="field">
+      Category
+      <select class="select" formControlName="category">
+        @for (c of categories; track c) {
+          <option [value]="c">{{ c }}</option>
+        }
+      </select>
+    </label>
+    <label class="field">
+      Repeats
+      <select class="select" formControlName="recurrence">
+        @for (r of recurrences; track r) {
+          <option [value]="r">{{ r === 'none' ? 'does not repeat' : r }}</option>
+        }
+      </select>
+    </label>
+  </div>
+
+  <div class="row">
+    <label class="field grow">
+      Amount
+      <input
+        class="input mono"
+        formControlName="amount"
+        inputmode="decimal"
+        placeholder="2340.50"
+      />
+      @if (invalid('amount')) {
+        <span class="invalid">Use digits with up to 2 decimals, for example 2,340.50.</span>
+      }
+    </label>
+    <label class="field narrow">
+      Currency
+      <input class="input mono" formControlName="currency" maxlength="3" placeholder="INR" />
+      @if (invalid('currency')) {
+        <span class="invalid">3 letters.</span>
+      }
+    </label>
+  </div>
+
+  <label class="field">
+    Due, renewal, or expiry date
+    <input class="input mono" type="date" formControlName="due_on" />
+  </label>
+
+  @if (obligation()) {
+    <div class="row">
+      <label class="field">
+        Status
+        <select class="select" formControlName="status">
+          <option value="open">open</option>
+          <option value="snoozed">snoozed</option>
+          <option value="done">done</option>
+          <option value="cancelled">cancelled</option>
+        </select>
+      </label>
+      @if (form.controls.status.value === 'snoozed') {
+        <label class="field">
+          Snoozed until
+          <input class="input mono" type="date" formControlName="snoozed_until" />
+        </label>
+      }
+    </div>
+  }
+
+  <label class="field">
+    Notes
+    <textarea
+      class="textarea"
+      formControlName="notes"
+      rows="3"
+      placeholder="Account number, provider, where the paper copy is"
+    ></textarea>
+  </label>
+
+  @if (error(); as message) {
+    <p class="banner error" role="alert">{{ message }}</p>
+  }
+
+  <footer>
+    <button class="btn primary" type="submit" [disabled]="saving()">
+      @if (saving()) {
+        <span class="spinner"></span>
+      }
+      {{ obligation() ? 'Save changes' : 'Add entry' }}
+    </button>
+    <button class="btn ghost" type="button" (click)="cancelled.emit()">Cancel</button>
+  </footer>
+</form>

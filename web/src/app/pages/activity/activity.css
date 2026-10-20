@@ -1,0 +1,106 @@
+.tabs {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: var(--card);
+}
+
+.tabs button {
+  padding: 0.35rem 0.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: var(--ink-2);
+}
+
+.tabs button.on {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.feed li {
+  border-bottom: 1px solid var(--rule);
+}
+
+.feed li.review .tag {
+  border-color: var(--green-2);
+  color: var(--green-2);
+}
+
+.row {
+  display: flex;
+  width: 100%;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.8rem 0.25rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover .title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+}
+
+.when {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.detail {
+  padding: 0 0.25rem 1rem 4.5rem;
+}
+
+.detail pre {
+  margin: 0 0 0.5rem;
+  white-space: pre-wrap;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+.sheet {
+  overflow-x: auto;
+}
+
+.actor {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 4px;
+  background: var(--paper-2);
+}
+
+.actor.agent {
+  background: var(--ochre-wash);
+  color: var(--ochre);
+}
+
+.actor.user {
+  background: var(--green-wash);
+  color: var(--green-2);
+}
+
+.actor.sweep,
+.actor.policy {
+  color: var(--ink-2);
+}

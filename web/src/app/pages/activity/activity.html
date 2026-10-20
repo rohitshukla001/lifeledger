@@ -1,0 +1,93 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Activity</p>
+      <h1>The paper trail</h1>
+      <p class="muted">
+        Reminders and reviews from the sweep, and every action with who asked for it.
+      </p>
+    </div>
+    <div class="tabs" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="tab() === 'notifications'"
+        [class.on]="tab() === 'notifications'"
+        (click)="tab.set('notifications')"
+      >
+        Notifications
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [attr.aria-selected]="tab() === 'audit'"
+        [class.on]="tab() === 'audit'"
+        (click)="tab.set('audit')"
+      >
+        Audit log
+      </button>
+    </div>
+  </header>
+
+  @if (error(); as message) {
+    <p class="banner error" role="alert">{{ message }}</p>
+  }
+
+  @if (tab() === 'notifications') {
+    <ul class="feed">
+      @for (n of notifications(); track n.id) {
+        <li [class]="n.kind">
+          <button
+            type="button"
+            class="row"
+            (click)="toggle(n.id)"
+            [attr.aria-expanded]="open() === n.id"
+          >
+            <span class="tag">{{ n.kind }}</span>
+            <span class="title">{{ n.title }}</span>
+            <span class="when muted mono">{{ n.created_at | ago }}</span>
+          </button>
+          @if (open() === n.id) {
+            <div class="detail">
+              <pre>{{ n.body }}</pre>
+              <p class="muted small">{{ delivery(n) }}</p>
+            </div>
+          }
+        </li>
+      } @empty {
+        <p class="empty">No reminders or reviews yet. They appear after a sweep.</p>
+      }
+    </ul>
+  } @else {
+    <div class="card sheet">
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th scope="col">When</th>
+            <th scope="col">Actor</th>
+            <th scope="col">Event</th>
+            <th scope="col">Subject</th>
+            <th scope="col">Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (e of audit(); track e.id) {
+            <tr>
+              <td class="mono small">{{ e.created_at | ago }}</td>
+              <td>
+                <span class="actor" [class]="'actor ' + e.actor">{{ e.actor }}</span>
+              </td>
+              <td class="mono small">{{ e.event }}</td>
+              <td class="mono small">{{ e.subject }}</td>
+              <td class="small">{{ e.detail }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5"><p class="empty">No actions yet.</p></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

@@ -1,0 +1,148 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Today</p>
+      <h1>{{ heading() || 'Your ledger' }}</h1>
+      <p class="muted">{{ summary() }}</p>
+    </div>
+    <div class="toolbar">
+      <button class="btn" type="button" [disabled]="busy() !== null" (click)="sweep(false)">
+        @if (busy() === 'sweep') {
+          <span class="spinner"></span>
+        }
+        Run sweep
+      </button>
+      <button class="btn primary" type="button" [disabled]="busy() !== null" (click)="sweep(true)">
+        @if (busy() === 'review') {
+          <span class="spinner"></span>
+        }
+        Write weekly review
+      </button>
+    </div>
+  </header>
+
+  @if (error(); as message) {
+    <p class="banner error" role="alert">{{ message }}</p>
+  }
+
+  @if (overview(); as o) {
+    <div class="tally">
+      <a class="tile red" routerLink="/ledger" [class.zero]="!o.overdue">
+        <span class="n">{{ o.overdue }}</span
+        ><span class="l">Overdue</span>
+      </a>
+      <a class="tile red" routerLink="/ledger" [class.zero]="!o.due_today">
+        <span class="n">{{ o.due_today }}</span
+        ><span class="l">Due today</span>
+      </a>
+      <a class="tile ochre" routerLink="/ledger" [class.zero]="!o.due_next_7_days">
+        <span class="n">{{ o.due_next_7_days }}</span
+        ><span class="l">Next 7 days</span>
+      </a>
+      <a class="tile green" routerLink="/approvals" [class.zero]="!o.pending_actions">
+        <span class="n">{{ o.pending_actions }}</span
+        ><span class="l">Waiting for you</span>
+      </a>
+      <a class="tile green" routerLink="/approvals" [class.zero]="!o.pending_proposals">
+        <span class="n">{{ o.pending_proposals }}</span
+        ><span class="l">To review</span>
+      </a>
+    </div>
+
+    <div class="columns">
+      <section>
+        <div class="section-head">
+          <h2>Coming up</h2>
+          <a routerLink="/ledger">Open ledger →</a>
+        </div>
+        @for (item of o.upcoming; track item.id; let i = $index) {
+          <article class="entry" [style.animation-delay.ms]="i * 60">
+            <div class="date" [class]="'date ' + tone(item.days_until_due)">
+              <span class="d">{{ day(item) }}</span>
+              <span class="m">{{ month(item) }}</span>
+            </div>
+            <div class="what">
+              <h3>{{ item.title }}</h3>
+              <p class="meta">
+                <span class="tag">{{ item.category }}</span>
+                @if (item.recurrence !== 'none') {
+                  <span class="muted">repeats {{ item.recurrence }}</span>
+                }
+              </p>
+            </div>
+            <div class="amount mono">{{ item.amount | money: item.currency }}</div>
+            <div class="when">
+              <ll-stamp [state]="tone(item.days_until_due)" />
+              <span class="muted small">{{ item.days_until_due | due }}</span>
+            </div>
+            <div class="acts">
+              <button
+                class="btn primary small"
+                type="button"
+                [disabled]="busy() !== null"
+                (click)="markPaid(item)"
+              >
+                @if (busy() === item.id) {
+                  <span class="spinner"></span>
+                }
+                {{ settleLabel(item.category) }}
+              </button>
+              <button
+                class="btn small"
+                type="button"
+                [disabled]="busy() !== null"
+                (click)="snooze(item, 3)"
+                title="Snooze for 3 days"
+              >
+                +3d
+              </button>
+              <button
+                class="btn small"
+                type="button"
+                [disabled]="busy() !== null"
+                (click)="calendar(item)"
+                title="Download a calendar file"
+              >
+                .ics
+              </button>
+            </div>
+          </article>
+        } @empty {
+          <p class="empty">No dated items. Tell the agent about a bill, or import one.</p>
+        }
+      </section>
+
+      <aside>
+        <section class="card review">
+          <p class="eyebrow">Weekly review</p>
+          @if (review(); as r) {
+            <h3>{{ r.title }}</h3>
+            <pre>{{ r.body }}</pre>
+            <p class="muted small">Written {{ r.created_at | ago }}</p>
+          } @else {
+            <p class="empty">No review yet. Write one now, or wait for Sunday evening.</p>
+          }
+        </section>
+
+        <section class="reminders">
+          <h2>Recent reminders</h2>
+          @for (n of reminders(); track n.id) {
+            <div class="reminder">
+              <span class="dot" [class.sent]="n.delivered_at"></span>
+              <div>
+                <p>{{ n.title }}</p>
+                <p class="muted small">
+                  {{ n.created_at | ago }} · {{ n.delivered_at ? 'sent' : 'in LifeLedger only' }}
+                </p>
+              </div>
+            </div>
+          } @empty {
+            <p class="muted small">No reminders yet.</p>
+          }
+        </section>
+      </aside>
+    </div>
+  } @else if (!error()) {
+    <p class="muted"><span class="spinner"></span> Loading…</p>
+  }
+</section>

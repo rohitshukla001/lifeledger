@@ -17,13 +17,14 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("LIFELEDGER_DB_PATH", "")
 	t.Setenv("LIFELEDGER_TIMEZONE", "")
 	t.Setenv("LIFELEDGER_CURRENCY", "")
+	t.Setenv("LIFELEDGER_WEB_DIR", "")
 
 	cfg, err := Load("")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if cfg.Addr != ":8080" || cfg.Env != EnvDev || cfg.LogLevel != slog.LevelInfo || cfg.DBPath != "data/lifeledger.db" ||
-		cfg.Location != time.UTC || cfg.Currency != "USD" {
+		cfg.Location != time.UTC || cfg.Currency != "USD" || cfg.WebDir != "web/dist/browser" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 }

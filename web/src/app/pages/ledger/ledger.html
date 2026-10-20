@@ -1,0 +1,175 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Ledger</p>
+      <h1>Everything you owe, renew, and keep</h1>
+    </div>
+    <button class="btn primary" type="button" (click)="editing.set('new')">New entry</button>
+  </header>
+
+  <div class="filters">
+    <div class="tabs" role="tablist">
+      @for (v of views; track v) {
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="view() === v"
+          [class.on]="view() === v"
+          (click)="setView(v)"
+        >
+          {{ v }}
+        </button>
+      }
+    </div>
+    <select
+      class="select cat"
+      aria-label="Category"
+      [ngModel]="category()"
+      (ngModelChange)="setCategory($event)"
+    >
+      <option value="">All categories</option>
+      @for (c of categories; track c) {
+        <option [value]="c">{{ c }}</option>
+      }
+    </select>
+    <input
+      class="input find"
+      type="search"
+      placeholder="Find by title or note"
+      aria-label="Find"
+      [ngModel]="search()"
+      (ngModelChange)="search.set($event)"
+    />
+  </div>
+
+  @if (error(); as message) {
+    <p class="banner error" role="alert">{{ message }}</p>
+  }
+
+  <div class="card sheet">
+    <table class="ledger">
+      <thead>
+        <tr>
+          <th scope="col">Due</th>
+          <th scope="col">Item</th>
+          <th scope="col" class="num">Amount</th>
+          <th scope="col">Status</th>
+          <th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (o of shown(); track o.id) {
+          <tr>
+            <td class="due">
+              <span class="mono">{{ (o.due_on | day) || '—' }}</span>
+              @if (o.status === 'open' && o.due_on) {
+                <span class="rel" [class]="'rel ' + tone(o.days_until_due)">{{
+                  o.days_until_due | due
+                }}</span>
+              }
+            </td>
+            <td>
+              <button class="title" type="button" (click)="editing.set(o)">{{ o.title }}</button>
+              <div class="meta">
+                <span class="tag">{{ o.category }}</span>
+                @if (o.recurrence !== 'none') {
+                  <span>↻ {{ o.recurrence }}</span>
+                }
+                @if (o.status === 'snoozed' && o.snoozed_until) {
+                  <span>until {{ o.snoozed_until | day }}</span>
+                }
+                @if (o.notes) {
+                  <span class="note">{{ o.notes }}</span>
+                }
+              </div>
+            </td>
+            <td class="num">{{ o.amount | money: o.currency }}</td>
+            <td><ll-stamp [state]="state(o)" /></td>
+            <td class="acts-cell">
+              <div class="acts">
+                @if (o.status === 'open' || o.status === 'snoozed') {
+                  <button
+                    class="btn small primary"
+                    type="button"
+                    [disabled]="busy() !== null"
+                    (click)="markPaid(o)"
+                  >
+                    @if (busy() === o.id) {
+                      <span class="spinner"></span>
+                    }
+                    {{ settleLabel(o.category) }}
+                  </button>
+                  @if (o.status === 'open') {
+                    <button
+                      class="btn small"
+                      type="button"
+                      [disabled]="busy() !== null"
+                      (click)="snooze(o)"
+                      title="Snooze reminders for 7 days"
+                    >
+                      Snooze
+                    </button>
+                  }
+                  @if (o.due_on) {
+                    <button
+                      class="btn small"
+                      type="button"
+                      [disabled]="busy() !== null"
+                      (click)="calendar(o)"
+                      title="Download a calendar file"
+                    >
+                      .ics
+                    </button>
+                  }
+                }
+                <button
+                  class="btn small ghost danger"
+                  type="button"
+                  [disabled]="busy() !== null"
+                  (click)="remove(o)"
+                  title="Delete"
+                >
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="5">
+              @if (loading()) {
+                <p class="muted"><span class="spinner"></span> Loading…</p>
+              } @else {
+                <p class="empty">Nothing here. Add an entry, import a bill, or tell the agent.</p>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+      @if (total().length) {
+        <tfoot>
+          <tr>
+            <td colspan="2" class="eyebrow">Open total</td>
+            <td class="num">
+              @for (t of total(); track t.currency) {
+                <div>{{ t.amount | money: t.currency }}</div>
+              }
+            </td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      }
+    </table>
+  </div>
+</section>
+
+@if (editing(); as target) {
+  <div class="scrim" (click)="editing.set(null)" aria-hidden="true"></div>
+  <aside class="drawer card" role="dialog" aria-modal="true" aria-label="Ledger entry">
+    <ll-obligation-form
+      [obligation]="formTarget()"
+      (saved)="saved($event)"
+      (cancelled)="editing.set(null)"
+    />
+  </aside>
+}

@@ -1,0 +1,152 @@
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.tabs {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: var(--card);
+}
+
+.tabs button {
+  padding: 0.35rem 0.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+  text-transform: capitalize;
+  font-size: 0.88rem;
+  color: var(--ink-2);
+}
+
+.tabs button.on {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.cat {
+  width: auto;
+}
+
+.find {
+  flex: 1;
+  min-width: 180px;
+}
+
+.sheet {
+  overflow-x: auto;
+}
+
+.due {
+  white-space: nowrap;
+}
+
+.due .mono {
+  display: block;
+  font-size: 0.85rem;
+}
+
+.rel {
+  font-size: 0.75rem;
+  color: var(--ink-3);
+}
+
+.rel.overdue,
+.rel.today {
+  color: var(--red);
+  font-weight: 500;
+}
+
+.rel.soon {
+  color: var(--ochre);
+}
+
+.title {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-weight: 500;
+  text-align: left;
+  color: var(--ink);
+}
+
+.title:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+
+.note {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+
+.acts-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.acts {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: end;
+}
+
+tfoot td {
+  border-bottom: 0;
+  border-top: 2px solid var(--ink);
+  font-weight: 500;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgb(20 18 14 / 35%);
+  z-index: 30;
+  animation: fade 0.2s ease-out both;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(440px, 100%);
+  padding: 1.5rem;
+  overflow-y: auto;
+  border-radius: var(--radius) 0 0 var(--radius);
+  z-index: 31;
+  animation: slide 0.25s ease-out both;
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}

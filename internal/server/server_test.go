@@ -23,7 +23,7 @@ type fakeDB struct{ err error }
 func (f fakeDB) Ping(context.Context) error { return f.err }
 
 func TestHealthz(t *testing.T) {
-	srv := New(":0", testLogger(), fakeDB{}, nil)
+	srv := New(Options{Addr: ":0", Logger: testLogger(), DB: fakeDB{}})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
@@ -43,7 +43,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestHealthzReportsDatabaseFailure(t *testing.T) {
-	srv := New(":0", testLogger(), fakeDB{err: errors.New("disk I/O error")}, nil)
+	srv := New(Options{Addr: ":0", Logger: testLogger(), DB: fakeDB{err: errors.New("disk I/O error")}})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
@@ -60,7 +60,7 @@ func TestHealthzReportsDatabaseFailure(t *testing.T) {
 }
 
 func TestHealthzRejectsPost(t *testing.T) {
-	srv := New(":0", testLogger(), fakeDB{}, nil)
+	srv := New(Options{Addr: ":0", Logger: testLogger(), DB: fakeDB{}})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/healthz", nil))
 
@@ -70,7 +70,7 @@ func TestHealthzRejectsPost(t *testing.T) {
 }
 
 func TestUnknownRouteIs404(t *testing.T) {
-	srv := New(":0", testLogger(), fakeDB{}, nil)
+	srv := New(Options{Addr: ":0", Logger: testLogger(), DB: fakeDB{}})
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/nope", nil))
 
@@ -84,7 +84,7 @@ func TestServeAndGracefulShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(ln.Addr().String(), testLogger(), fakeDB{}, nil)
+	srv := New(Options{Addr: ln.Addr().String(), Logger: testLogger(), DB: fakeDB{}})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -114,7 +114,7 @@ func TestAPIIsMountedAndPanicsAreRecovered(t *testing.T) {
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/ping", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("pong")) })
 	api.HandleFunc("GET /api/v1/boom", func(http.ResponseWriter, *http.Request) { panic("boom") })
-	h := New(":0", testLogger(), fakeDB{}, api).Handler()
+	h := New(Options{Addr: ":0", Logger: testLogger(), DB: fakeDB{}, API: api}).Handler()
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/ping", nil))

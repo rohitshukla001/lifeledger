@@ -1,0 +1,86 @@
+.block {
+  margin-bottom: 2.5rem;
+}
+
+.block h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.count {
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: var(--paper-2);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.action {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1rem;
+  max-width: 720px;
+}
+
+.action header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.letter {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 25px,
+      color-mix(in srgb, var(--rule) 60%, transparent) 25px 26px
+    ),
+    var(--paper);
+}
+
+.line {
+  margin: 0 0 0.35rem;
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+}
+
+.line .eyebrow {
+  width: 4.5rem;
+  flex: none;
+}
+
+.letter pre {
+  margin: 0.75rem 0 0;
+  white-space: pre-wrap;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.action footer {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+.err {
+  color: var(--red);
+  font-size: 0.85rem;
+}

@@ -1,0 +1,103 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Approvals</p>
+      <h1>Nothing leaves without your stamp</h1>
+      <p class="muted">The agent drafts emails and the importer proposes new items. You decide.</p>
+    </div>
+  </header>
+
+  @if (error(); as message) {
+    <p class="banner error" role="alert">{{ message }}</p>
+  }
+
+  <section class="block">
+    <h2>
+      Waiting for approval <span class="count mono">{{ pending().length }}</span>
+    </h2>
+    @for (a of pending(); track a.id) {
+      <article class="card action">
+        <header>
+          <span class="tag">{{ a.kind.replace('_', ' ') }}</span>
+          <span class="muted small"
+            >Requested by {{ a.requested_by }} · {{ a.created_at | ago }}</span
+          >
+        </header>
+        @if (a.kind === 'send_email') {
+          <div class="letter">
+            <p class="line">
+              <span class="eyebrow">To</span> <span class="mono">{{ email(a).to }}</span>
+            </p>
+            <p class="line"><span class="eyebrow">Subject</span> {{ email(a).subject }}</p>
+            <pre>{{ email(a).body }}</pre>
+          </div>
+        } @else {
+          <p>{{ a.summary }}</p>
+        }
+        <footer>
+          <button
+            class="btn primary"
+            type="button"
+            [disabled]="busy() !== null"
+            (click)="approve(a)"
+          >
+            @if (busy() === 'a' + a.id) {
+              <span class="spinner"></span>
+            }
+            {{ a.kind === 'send_email' ? 'Approve and send' : 'Approve' }}
+          </button>
+          <button class="btn danger" type="button" [disabled]="busy() !== null" (click)="reject(a)">
+            Reject
+          </button>
+        </footer>
+      </article>
+    } @empty {
+      @if (!loading()) {
+        <p class="empty">No action waits for you.</p>
+      }
+    }
+  </section>
+
+  <section class="block">
+    <h2>
+      Proposed from documents <span class="count mono">{{ proposals().length }}</span>
+    </h2>
+    <div class="grid">
+      @for (p of proposals(); track p.id) {
+        <ll-proposal-card
+          [proposal]="p"
+          [busy]="busy() === 'p' + p.id"
+          (accept)="accept(p)"
+          (reject)="discard(p)"
+        />
+      } @empty {
+        @if (!loading()) {
+          <p class="empty">No proposals. Import an email or a PDF bill.</p>
+        }
+      }
+    </div>
+  </section>
+
+  @if (decided().length) {
+    <section class="block">
+      <h2>Recent decisions</h2>
+      <table class="ledger">
+        <tbody>
+          @for (a of decided(); track a.id) {
+            <tr>
+              <td class="mono small muted">#{{ a.id }}</td>
+              <td>
+                {{ a.summary }}
+                @if (a.error) {
+                  <span class="err"> · {{ a.error }}</span>
+                }
+              </td>
+              <td><ll-stamp [state]="a.status" /></td>
+              <td class="muted small">{{ a.executed_at || a.decided_at || a.created_at | ago }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+  }
+</section>

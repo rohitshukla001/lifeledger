@@ -1,0 +1,96 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Import</p>
+      <h1>Hand over the paperwork</h1>
+      <p class="muted">
+        Drop a PDF bill or paste an email. Nemotron 3 Nano reads it and proposes items. Nothing is
+        added until you accept it.
+      </p>
+    </div>
+  </header>
+
+  <div class="intake">
+    <label
+      class="drop"
+      [class.over]="dragging()"
+      (dragover)="$event.preventDefault(); dragging.set(true)"
+      (dragleave)="dragging.set(false)"
+      (drop)="dropped($event)"
+    >
+      <input
+        type="file"
+        accept=".pdf,.txt,.eml,.md,application/pdf,text/plain,message/rfc822"
+        (change)="picked($event)"
+        [disabled]="working()"
+      />
+      <span class="big">⇣</span>
+      <span class="lead">Drop a file here, or choose one</span>
+      <span class="muted small"
+        >PDF with selectable text, or a text or email file. 10 MB or less.</span
+      >
+    </label>
+
+    <div class="paste">
+      <label class="field">
+        Or paste the text of an email or bill
+        <textarea
+          class="textarea"
+          rows="8"
+          [ngModel]="text()"
+          (ngModelChange)="text.set($event)"
+          [disabled]="working()"
+          placeholder="Dear customer, your Airtel broadband bill of ₹999 is due on 15 Nov 2026…"
+        ></textarea>
+      </label>
+      <button
+        class="btn primary"
+        type="button"
+        [disabled]="working() || !text().trim()"
+        (click)="paste()"
+      >
+        Extract items
+      </button>
+    </div>
+  </div>
+
+  @if (working()) {
+    <p class="reading"><span class="spinner"></span> Reading the document…</p>
+  }
+  @if (error(); as message) {
+    <p class="banner error" role="alert">{{ message }}</p>
+  }
+
+  @if (result(); as r) {
+    <section class="result">
+      <header>
+        <p class="eyebrow">{{ r.source_kind }} · {{ r.source_name }}</p>
+        <h2>{{ r.summary || 'Document read' }}</h2>
+        @if (r.reused) {
+          <p class="banner info">You imported this document before. These are its proposals.</p>
+        }
+        @if (r.truncated) {
+          <p class="banner info">The document was long, so only the first part was read.</p>
+        }
+      </header>
+      <div class="grid">
+        @for (p of pending(r); track p.id) {
+          <ll-proposal-card
+            [proposal]="p"
+            [busy]="busy() === p.id"
+            (accept)="accept(p)"
+            (reject)="discard(p)"
+          />
+        } @empty {
+          <p class="empty">
+            @if (r.proposals.length) {
+              All proposals are decided. <a routerLink="/ledger">Open the ledger</a>.
+            } @else {
+              No bills, renewals, or deadlines were found in this document.
+            }
+          </p>
+        }
+      </div>
+    </section>
+  }
+</section>

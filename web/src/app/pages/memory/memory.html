@@ -1,0 +1,118 @@
+<section class="page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Memory</p>
+      <h1>What LifeLedger knows about you</h1>
+      <p class="muted">
+        Every memory is yours to read, correct, or forget. The agent uses them in each conversation.
+      </p>
+    </div>
+  </header>
+
+  <form class="card add" (ngSubmit)="add()">
+    <input
+      class="input"
+      name="content"
+      placeholder="Something to remember, for example: Car insurance is with Acko"
+      [ngModel]="content()"
+      (ngModelChange)="content.set($event)"
+    />
+    <select
+      class="select"
+      name="kind"
+      aria-label="Kind"
+      [ngModel]="kind()"
+      (ngModelChange)="kind.set($event)"
+    >
+      @for (k of kinds; track k) {
+        <option [value]="k">{{ k }}</option>
+      }
+    </select>
+    <button class="btn primary" type="submit" [disabled]="!content().trim()">Remember</button>
+  </form>
+
+  <label class="find">
+    <span class="sr-only">Recall</span>
+    <input
+      class="input"
+      type="search"
+      placeholder="Ask your memory, for example: who insures my car?"
+      [ngModel]="query()"
+      (ngModelChange)="search($event)"
+    />
+  </label>
+
+  @if (error(); as message) {
+    <p class="banner error" role="alert">{{ message }}</p>
+  }
+
+  @if (hits(); as found) {
+    <h2 class="sub">Best matches</h2>
+    <ul class="list">
+      @for (m of found; track m.id) {
+        <li class="memory">
+          <span class="score mono" [title]="'Match score'">{{
+            ((m.score ?? 0) * 100).toFixed(0)
+          }}</span>
+          <div>
+            <p>{{ m.content }}</p>
+            <p class="meta">
+              <span class="tag">{{ m.kind }}</span> {{ source(m) }}
+            </p>
+          </div>
+        </li>
+      } @empty {
+        <p class="empty">No memory matches that.</p>
+      }
+    </ul>
+  }
+
+  <h2 class="sub">
+    All memories <span class="muted mono">{{ items().length }}</span>
+  </h2>
+  <ul class="list">
+    @for (m of items(); track m.id) {
+      <li class="memory" [class]="'memory ' + m.kind">
+        <span class="kind" aria-hidden="true"></span>
+        <div class="body">
+          @if (editing() === m.id) {
+            <form class="edit" (ngSubmit)="saveEdit(m)">
+              <input
+                class="input"
+                name="edit"
+                [ngModel]="editText()"
+                (ngModelChange)="editText.set($event)"
+                autofocus
+              />
+              <button class="btn small primary" type="submit">Save</button>
+              <button class="btn small ghost" type="button" (click)="editing.set(null)">
+                Cancel
+              </button>
+            </form>
+          } @else {
+            <p>{{ m.content }}</p>
+          }
+          <p class="meta">
+            <span class="tag">{{ m.kind }}</span>
+            @if (m.source === 'web' && m.source_ref) {
+              <a [href]="m.source_ref" target="_blank" rel="noopener noreferrer">source ↗</a>
+            } @else {
+              <span>{{ source(m) }}</span>
+            }
+            <span>· {{ m.updated_at | ago }}</span>
+          </p>
+        </div>
+        @if (editing() !== m.id) {
+          <div class="acts">
+            <button class="btn small ghost" type="button" (click)="startEdit(m)">Edit</button>
+            <button class="btn small ghost danger" type="button" (click)="forget(m)">Forget</button>
+          </div>
+        }
+      </li>
+    } @empty {
+      @if (!loading()) {
+        <p class="empty">Nothing yet. Tell the agent something about yourself, or add it above.</p>
+      }
+    }
+  </ul>
+</section>

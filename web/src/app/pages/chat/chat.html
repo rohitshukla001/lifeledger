@@ -1,0 +1,127 @@
+<div class="chat">
+  <aside class="threads">
+    <button class="btn primary new" type="button" (click)="newChat()">New conversation</button>
+    <nav aria-label="Conversations">
+      @for (c of conversations(); track c.id) {
+        <a class="thread" [routerLink]="['/chat', c.id]" [class.active]="c.id === current()">
+          <span class="t">{{ c.title || 'Untitled' }}</span>
+          <span class="when mono">{{ c.updated_at | ago }}</span>
+          <button class="del" type="button" title="Delete conversation" (click)="remove(c, $event)">
+            ×
+          </button>
+        </a>
+      } @empty {
+        <p class="muted small">No conversations yet.</p>
+      }
+    </nav>
+  </aside>
+
+  <section class="talk">
+    <header>
+      <p class="eyebrow">Agent · Nemotron 3 Super</p>
+      <h1>{{ title() }}</h1>
+    </header>
+
+    <div class="log" #log aria-live="polite">
+      @if (loading()) {
+        <p class="muted"><span class="spinner"></span> Loading the conversation…</p>
+      }
+      @for (turn of turns(); track $index) {
+        @if (isAgent(turn)) {
+          <article class="agent">
+            @if (turn.steps.length) {
+              <ol class="steps">
+                @for (step of turn.steps; track $index) {
+                  <li [class.failed]="step.failed" [class.running]="!step.done">
+                    <details>
+                      <summary>
+                        @if (!step.done) {
+                          <span class="spinner"></span>
+                        } @else if (step.failed) {
+                          <span class="mark">!</span>
+                        } @else {
+                          <span class="mark">✓</span>
+                        }
+                        {{ label(step.name) }}
+                        <code>{{ step.name }}</code>
+                      </summary>
+                      <div class="io">
+                        <p class="eyebrow">Arguments</p>
+                        <pre>{{ pretty(step.arguments) }}</pre>
+                        @if (step.result) {
+                          <p class="eyebrow">Result</p>
+                          <pre>{{ pretty(step.result) }}</pre>
+                        }
+                      </div>
+                    </details>
+                  </li>
+                }
+              </ol>
+            }
+            @if (turn.text) {
+              <p class="reply">
+                @for (seg of segments(turn.text); track $index) {
+                  @if (seg.href) {
+                    <a [href]="seg.href" target="_blank" rel="noopener noreferrer">{{
+                      seg.text
+                    }}</a>
+                  } @else {
+                    <span>{{ seg.text }}</span>
+                  }
+                }
+              </p>
+            } @else if (turn.pending) {
+              <p class="thinking"><span class="spinner"></span> Thinking…</p>
+            }
+            @if (turn.error) {
+              <p class="banner error">{{ turn.error }}</p>
+            }
+            @if (turn.cost !== undefined) {
+              <p class="cost mono">{{ turn.tokens }} tokens · ${{ turn.cost.toFixed(4) }}</p>
+            }
+          </article>
+        } @else {
+          <article class="user">
+            <p>{{ turn.text }}</p>
+          </article>
+        }
+      } @empty {
+        @if (!loading()) {
+          <div class="welcome">
+            <h2>Tell me what to keep track of.</h2>
+            <p class="muted">
+              I record bills and deadlines, remember what you tell me, search the web for official
+              dates, and draft emails for your approval.
+            </p>
+            <div class="ideas">
+              @for (s of suggestions; track s) {
+                <button type="button" class="idea" (click)="use(s)">{{ s }}</button>
+              }
+            </div>
+          </div>
+        }
+      }
+    </div>
+
+    <form class="composer" (ngSubmit)="send()">
+      <label class="sr-only" for="message">Message</label>
+      <textarea
+        id="message"
+        name="message"
+        class="textarea"
+        rows="2"
+        placeholder="Write a message. Enter sends, Shift+Enter adds a line."
+        [ngModel]="draft()"
+        (ngModelChange)="draft.set($event)"
+        (keydown)="keydown($event)"
+        [disabled]="streaming()"
+      ></textarea>
+      <button class="btn primary" type="submit" [disabled]="streaming() || !draft().trim()">
+        @if (streaming()) {
+          <span class="spinner"></span>
+        }
+        Send
+      </button>
+    </form>
+  </section>
+</div>

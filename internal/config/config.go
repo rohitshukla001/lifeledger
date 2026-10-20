@@ -22,6 +22,7 @@ const (
 type Config struct {
 	Addr     string
 	APIToken string
+	WebDir   string
 	Env      string
 	LogLevel slog.Level
 	DBPath   string
@@ -65,6 +66,7 @@ func Load(envFile string) (Config, error) {
 	cfg := Config{
 		Addr:          getenv("LIFELEDGER_ADDR", ":8080"),
 		APIToken:      os.Getenv("LIFELEDGER_API_TOKEN"),
+		WebDir:        getenv("LIFELEDGER_WEB_DIR", "web/dist/browser"),
 		Env:           strings.ToLower(getenv("LIFELEDGER_ENV", EnvDev)),
 		DBPath:        getenv("LIFELEDGER_DB_PATH", "data/lifeledger.db"),
 		Currency:      strings.ToUpper(getenv("LIFELEDGER_CURRENCY", "USD")),

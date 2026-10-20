@@ -1,0 +1,39 @@
+<main class="unlock">
+  <section class="cover">
+    <div class="spine" aria-hidden="true"></div>
+    <div class="content">
+      <p class="eyebrow">Private life-admin agent</p>
+      <h1>Life<em>Ledger</em></h1>
+      <p class="lede">
+        Bills, renewals, warranties, and deadlines. Remembered, reminded, and handled, with your
+        approval.
+      </p>
+
+      @if (checking()) {
+        <p class="muted"><span class="spinner"></span> Opening your ledger…</p>
+      } @else {
+        <form (ngSubmit)="submit()">
+          <label class="field">
+            API token
+            <input
+              class="input mono"
+              type="password"
+              name="token"
+              autocomplete="current-password"
+              [ngModel]="token()"
+              (ngModelChange)="token.set($event)"
+              autofocus
+            />
+            <span class="hint"
+              >The value of LIFELEDGER_API_TOKEN on your server. It stays in this browser.</span
+            >
+          </label>
+          @if (error(); as message) {
+            <p class="banner error" role="alert">{{ message }}</p>
+          }
+          <button class="btn primary" type="submit">Open ledger</button>
+        </form>
+      }
+    </div>
+  </section>
+</main>

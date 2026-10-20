@@ -1,0 +1,255 @@
+.tally {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+.tile {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--rule);
+  border-top: 3px solid currentColor;
+  border-radius: 4px 4px var(--radius) var(--radius);
+  background: var(--card);
+  text-decoration: none;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s;
+}
+
+.tile:hover {
+  transform: translateY(-2px);
+}
+
+.tile.red {
+  color: var(--red);
+}
+
+.tile.ochre {
+  color: var(--ochre);
+}
+
+.tile.green {
+  color: var(--green-2);
+}
+
+.tile.zero {
+  color: var(--ink-3);
+}
+
+.n {
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  line-height: 1;
+  font-variation-settings: 'opsz' 144;
+}
+
+.l {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.75rem;
+}
+
+.section-head a {
+  font-size: 0.85rem;
+}
+
+.entry {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'date what amount'
+    'date when acts';
+  gap: 0.35rem 1rem;
+  align-items: center;
+  padding: 0.85rem 0.25rem;
+  border-bottom: 1px dashed var(--rule-strong);
+  animation: rise 0.3s ease-out both;
+}
+
+.date {
+  grid-area: date;
+  display: grid;
+  place-items: center;
+  height: 56px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--card);
+  line-height: 1;
+}
+
+.date .d {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+}
+
+.date .m {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+.date.overdue,
+.date.today {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-wash);
+}
+
+.date.soon {
+  border-color: var(--ochre);
+  color: var(--ochre);
+  background: var(--ochre-wash);
+}
+
+.what {
+  grid-area: what;
+  min-width: 0;
+}
+
+.what h3 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  margin: 0.2rem 0 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.amount {
+  grid-area: amount;
+  text-align: right;
+  font-size: 1rem;
+}
+
+.when {
+  grid-area: when;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.acts {
+  grid-area: acts;
+  display: flex;
+  gap: 0.35rem;
+  justify-content: end;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+aside {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.review {
+  padding: 1.1rem 1.2rem;
+  display: grid;
+  gap: 0.6rem;
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    repeating-linear-gradient(135deg, var(--rule-strong) 0 6px, transparent 6px 12px) border-box;
+  border: 3px solid transparent;
+}
+
+.review pre {
+  margin: 0;
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.review .empty {
+  padding: 1rem 0;
+  text-align: left;
+}
+
+.reminders h2 {
+  margin-bottom: 0.5rem;
+}
+
+.reminder {
+  display: flex;
+  gap: 0.7rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.reminder p {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 0.4rem;
+  border-radius: 50%;
+  border: 2px solid var(--ochre);
+}
+
+.dot.sent {
+  background: var(--green-2);
+  border-color: var(--green-2);
+}
+
+@media (max-width: 960px) {
+  .tally {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .tally {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .entry {
+    grid-template-columns: 48px minmax(0, 1fr);
+    grid-template-areas:
+      'date what'
+      'date amount'
+      'when when'
+      'acts acts';
+  }
+
+  .amount {
+    text-align: left;
+  }
+
+  .acts {
+    justify-content: start;
+  }
+}

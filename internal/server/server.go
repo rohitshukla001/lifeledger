@@ -17,18 +17,30 @@ type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
+type Options struct {
+	Addr   string
+	Logger *slog.Logger
+	DB     Pinger
+	API    http.Handler
+	Site   http.Handler
+}
+
 type Server struct {
 	log     *slog.Logger
 	db      Pinger
 	api     http.Handler
+	site    http.Handler
 	http    *http.Server
 	started time.Time
 }
 
-func New(addr string, log *slog.Logger, db Pinger, api http.Handler) *Server {
-	s := &Server{log: log, db: db, api: api, started: time.Now()}
+func New(o Options) *Server {
+	s := &Server{log: o.Logger, db: o.DB, api: o.API, site: o.Site, started: time.Now()}
+	if s.log == nil {
+		s.log = slog.New(slog.DiscardHandler)
+	}
 	s.http = &http.Server{
-		Addr:              addr,
+		Addr:              o.Addr,
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -43,6 +55,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	if s.api != nil {
 		mux.Handle("/api/", s.api)
+	}
+	if s.site != nil {
+		mux.Handle("/", s.site)
 	}
 	return s.logRequests(s.recoverPanics(mux))
 }
