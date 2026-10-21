@@ -33,6 +33,7 @@ Commands:
   search [flags] QUERY  Search the web with Tavily and show cited sources.
   sweep [-review]       Run one sweep: wake snoozed items, remind, review, deliver.
   notifications <cmd>   List reminders and reviews, or send a Telegram test.
+  seed                  Fill an empty database with demo data.
   version               Print the build version.
   help                  Show this help.
 
@@ -108,6 +109,8 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		return a.sweep(ctx, fs.Args()[1:])
 	case "notifications":
 		return a.notifications(ctx, fs.Args()[1:])
+	case "seed":
+		return a.seed(ctx)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", cmd)
 		fs.Usage()

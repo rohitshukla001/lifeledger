@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/rohitshukla001/lifeledger/internal/api"
 	"github.com/rohitshukla001/lifeledger/internal/ingest"
 	"github.com/rohitshukla001/lifeledger/internal/memory"
+	"github.com/rohitshukla001/lifeledger/internal/seed"
 	"github.com/rohitshukla001/lifeledger/internal/server"
 	"github.com/rohitshukla001/lifeledger/internal/store"
 	"github.com/rohitshukla001/lifeledger/internal/version"
@@ -29,6 +31,18 @@ func (a *app) serve(ctx context.Context) int {
 	}
 
 	client := a.optionalLLM()
+	if a.cfg.SeedDemo {
+		sum, err := a.seedDemo(ctx, db, client)
+		switch {
+		case errors.Is(err, seed.ErrNotEmpty):
+			a.log.Info("demo data not added; the database already has data")
+		case err != nil:
+			a.log.Error("cannot add demo data", "err", err)
+			return 1
+		default:
+			a.log.Info("demo data added", "summary", sum.String())
+		}
+	}
 	opts := api.Options{
 		Store:    db,
 		Actions:  a.actionService(db),
@@ -59,7 +73,7 @@ func (a *app) serve(ctx context.Context) int {
 			defer wg.Done()
 			opts.Sweeper.Run(ctx, a.cfg.SweepInterval)
 		}()
-		a.log.Info("sweep started", "every", a.cfg.SweepInterval)
+		a.log.Info("sweep started", "every", a.cfg.SweepInterval.String())
 	}
 
 	site, err := server.Site(a.cfg.WebDir)

@@ -271,3 +271,18 @@ func TestLoadAPIToken(t *testing.T) {
 		t.Fatalf("valid token: %+v, %v", cfg, err)
 	}
 }
+
+func TestLoadSeedDemo(t *testing.T) {
+	t.Setenv("LIFELEDGER_SEED_DEMO", "")
+	if cfg, err := Load(""); err != nil || cfg.SeedDemo {
+		t.Fatalf("default: %+v, %v", cfg.SeedDemo, err)
+	}
+	t.Setenv("LIFELEDGER_SEED_DEMO", "true")
+	if cfg, err := Load(""); err != nil || !cfg.SeedDemo {
+		t.Fatalf("true: %+v, %v", cfg.SeedDemo, err)
+	}
+	t.Setenv("LIFELEDGER_SEED_DEMO", "maybe")
+	if _, err := Load(""); err == nil || !strings.Contains(err.Error(), "LIFELEDGER_SEED_DEMO") {
+		t.Fatalf("bad value: %v", err)
+	}
+}

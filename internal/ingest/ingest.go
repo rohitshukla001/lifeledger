@@ -79,6 +79,15 @@ func New(o Options) *Service {
 	return s
 }
 
+func Hash(text string) string {
+	sum := sha256.Sum256([]byte(normalizeText(text)))
+	return hex.EncodeToString(sum[:])
+}
+
+func normalizeText(text string) string {
+	return strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
+}
+
 func (s *Service) Text(ctx context.Context, name, text string) (*Result, error) {
 	return s.ingest(ctx, kindText, name, text)
 }
@@ -104,12 +113,11 @@ func (s *Service) Reject(ctx context.Context, proposalID int64) error {
 }
 
 func (s *Service) ingest(ctx context.Context, kind, name, text string) (*Result, error) {
-	text = strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
+	text = normalizeText(text)
 	if text == "" {
 		return nil, ledger.Invalid(ErrEmpty)
 	}
-	sum := sha256.Sum256([]byte(text))
-	hash := hex.EncodeToString(sum[:])
+	hash := Hash(text)
 
 	if prev, err := s.store.IngestionByHash(ctx, hash); err == nil {
 		props, err := s.store.ListProposals(ctx, store.ProposalFilter{IngestionID: prev.ID})

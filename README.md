@@ -28,6 +28,7 @@ LifeLedger is an entry in the Personal AI track of the [Nebius x NVIDIA Global A
 - A web app (Angular) with seven views: Today, Chat (the agent's tool calls appear live), Ledger, Approvals, Import, Memory, and Activity. It works in light and dark mode and on a phone.
 - A JSON HTTP API for all features, protected by a bearer token. Chat can stream each tool call and the reply as server-sent events.
 - HTTP service with a health endpoint that also checks the database.
+- One container image (distroless, non-root) that runs on Nebius Serverless AI on a CPU-only VM. A GitHub Actions workflow tests each push and publishes the image.
 
 ## Architecture
 
@@ -78,6 +79,7 @@ The service is one Go binary. Each command of the binary is a separate entry poi
 - Go 1.24.1 or later, with CGO enabled (the default).
 - A C compiler for the SQLite driver. On macOS, install the Xcode Command Line Tools with `xcode-select --install`.
 - Node.js 22.22.3 or later (or 24.15 or later), with npm, for the web app.
+- Optional: Docker, to build and run the container image.
 - GNU Make.
 - Git.
 - A Nebius Token Factory account and API key. Create the key at [tokenfactory.nebius.com](https://tokenfactory.nebius.com).
@@ -140,7 +142,15 @@ The service is one Go binary. Each command of the binary is a separate entry poi
    curl -s -H "Authorization: Bearer $LIFELEDGER_API_TOKEN" localhost:8080/api/v1/overview
    ```
 
-7. Optional: to get reminders on Telegram, do these steps:
+7. Optional: to see the app with realistic data, fill an empty database with the demo data:
+
+   ```sh
+   ./bin/lifeledger seed
+   ```
+
+   The command adds bills, renewals, a warranty, memories, an email that waits for approval, and two import proposals. The dates are relative to today.
+
+8. Optional: to get reminders on Telegram, do these steps:
 
    1. In Telegram, send `/newbot` to [@BotFather](https://t.me/BotFather) and copy the bot token.
    2. Send a message to your new bot.
@@ -162,6 +172,7 @@ LifeLedger reads its settings from environment variables. It also reads a `.env`
 | `PORT` | none | Listen port that container hosts set. LifeLedger uses it only if `LIFELEDGER_ADDR` is empty. |
 | `LIFELEDGER_API_TOKEN` | none | Bearer token for `/api/v1`. It must have 24 or more characters. It is necessary when `LIFELEDGER_ENV` is `prod`. If it is empty in `dev`, the API accepts requests without a token. |
 | `LIFELEDGER_WEB_DIR` | `web/dist/browser` | Directory of the built web app. If it has no `index.html`, the server runs without the web app. |
+| `LIFELEDGER_SEED_DEMO` | `false` | If `true`, `serve` adds the demo data at startup when the database is empty. |
 | `LIFELEDGER_ENV` | `dev` | `dev` gives text logs. `prod` gives JSON logs. |
 | `LIFELEDGER_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `LIFELEDGER_DB_PATH` | `data/lifeledger.db` | SQLite database file. LifeLedger makes the directory if it does not exist. |
@@ -210,7 +221,12 @@ Do not put API keys or passwords in the repository. Keep them in `.env`. Git ign
 | `make web-dev` | Start the Angular dev server on http://localhost:4200. It sends `/api` to the server on port 8080, so start `make run` first. |
 | `make web-test` | Run the web app unit tests (Vitest). |
 | `make web-check` | Run the Prettier check, the web app tests, and the production build. Run it before each commit that changes `web/`. |
+| `make docker` | Build the `linux/amd64` container image. Set `IMAGE=name:tag` to change the name. |
+| `make docker-run` | Run the image on port 8080 with `.env` and a Docker volume for the database. |
+| `make smoke URL=https://...` | Check a running server: health, web app, headers, token check, and API lists. Export `LIFELEDGER_API_TOKEN` first. Run `scripts/smoke.sh URL --chat` to also check one agent reply. |
 | `make help` | Show all targets. |
+
+To deploy LifeLedger on Nebius Serverless AI, follow [Deploy LifeLedger on Nebius Serverless](docs/deploy-nebius.md).
 
 Binary commands:
 
@@ -241,6 +257,7 @@ Binary commands:
 | `lifeledger sweep [-review]` | Run one sweep now and show what it did. `-review` also writes a weekly review now and shows it. Use it from a scheduled job when the server is not running. |
 | `lifeledger notifications [list [-n N]]` | Show recent reminders and reviews, with their delivery status. |
 | `lifeledger notifications test` | Send a test message to Telegram. |
+| `lifeledger seed` | Fill an empty database with the demo data. |
 | `lifeledger version` | Show the build version. |
 | `lifeledger help` | Show the help text. |
 
@@ -262,9 +279,14 @@ internal/tavily/    # Tavily Search API client with retry
 internal/api/       # HTTP API handlers, bearer token check, and chat streaming
 internal/ledger/    # Shared obligation validation, views, filters, and the invalid-input error
 internal/server/    # HTTP server, health endpoint, request log, and panic recovery
+internal/seed/      # Demo data with dates relative to today
 internal/version/   # Build version, set at build time
 web/                # Angular web app: core services, pages, shared components, unit tests
 docs/adr/           # Architecture decision records
+docs/               # API reference and the Nebius deployment runbook
+scripts/smoke.sh    # Smoke test for a running server
+Dockerfile          # Multi-stage image: web app, Go binary, distroless runtime
+.github/workflows/  # CI: Go and web checks, image publish to GitHub Container Registry
 ```
 
 ## Troubleshooting
@@ -299,6 +321,8 @@ docs/adr/           # Architecture decision records
 | `telegram: 401 Unauthorized` | The bot token is not correct. | Copy the token again from @BotFather. |
 | A reminder shows `failed 5x` | Delivery failed 5 times. LifeLedger does not try again. It also does not send reminders that are more than 24 hours old. | Correct the cause in the error message. New reminders are sent on the next sweep. |
 | The weekly review says `The model was not available` | The Ultra call and the fallbacks failed, or the daily spend limit was reached. | The review still lists your ledger. Read the log for the model error. |
+| `the database already has data` from `lifeledger seed` | The seed adds data only to an empty database. | Use a new `LIFELEDGER_DB_PATH`, or delete the database file first. |
+| `make docker` is slow on an Apple Silicon Mac | Docker emulates `linux/amd64` to compile the Go binary. | Use the image that the `ci` workflow publishes. |
 | `web UI is off` in the server log | `web/dist/browser/index.html` does not exist. | Run `make web-install` and `make web`, or set `LIFELEDGER_WEB_DIR`. |
 | `The Angular CLI requires a minimum Node.js version` | Node.js is too old. | Install Node.js 22.22.3 or later, or 24.15 or later. |
 | The web app asks for the token again | The server did not accept the saved token, for example after a change of `LIFELEDGER_API_TOKEN`. | Enter the new token. |
@@ -329,6 +353,8 @@ docs/adr/           # Architecture decision records
 - [ADR 0008](docs/adr/0008-sweep-and-notifications.md): sweep, reminders, weekly review, and Telegram delivery.
 - [ADR 0009](docs/adr/0009-http-api.md): HTTP API, bearer token, and chat streaming.
 - [ADR 0010](docs/adr/0010-web-app.md): Angular web app.
+- [ADR 0011](docs/adr/0011-deployment.md): container image and Nebius Serverless deployment.
+- [Deploy LifeLedger on Nebius Serverless](docs/deploy-nebius.md): step-by-step runbook.
 - [API reference](docs/api.md): endpoints, error format, and chat events.
 - [Token Factory documentation](https://docs.tokenfactory.nebius.com/quickstart).
 - [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).

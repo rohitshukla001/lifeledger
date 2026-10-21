@@ -23,6 +23,7 @@ type Config struct {
 	Addr     string
 	APIToken string
 	WebDir   string
+	SeedDemo bool
 	Env      string
 	LogLevel slog.Level
 	DBPath   string
@@ -112,6 +113,12 @@ func Load(envFile string) (Config, error) {
 	if len(cfg.Currency) != 3 {
 		errs = append(errs, fmt.Errorf("LIFELEDGER_CURRENCY must be a 3-letter ISO 4217 code, got %q", cfg.Currency))
 	}
+	seed, err := strconv.ParseBool(getenv("LIFELEDGER_SEED_DEMO", "false"))
+	if err != nil {
+		errs = append(errs, fmt.Errorf("LIFELEDGER_SEED_DEMO must be true or false, got %q", os.Getenv("LIFELEDGER_SEED_DEMO")))
+	}
+	cfg.SeedDemo = seed
+
 	budget, err := strconv.ParseFloat(getenv("LIFELEDGER_DAILY_BUDGET_USD", "2"), 64)
 	if err != nil || budget < 0 {
 		errs = append(errs, fmt.Errorf("LIFELEDGER_DAILY_BUDGET_USD must be a number >= 0, got %q", os.Getenv("LIFELEDGER_DAILY_BUDGET_USD")))
