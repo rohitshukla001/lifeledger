@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+bin
+data
+_snapshots
+*.db
+*.db-*
+web/node_modules
+web/dist
+web/.angular
+web/coverage
+**/.DS_Store

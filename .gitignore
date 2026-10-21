@@ -1,0 +1,32 @@
+# Build output
+/bin/
+/dist/
+
+# Secrets and local settings. Never commit these.
+.env
+.env.*
+!.env.example
+
+# Local data
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Go
+*.test
+*.out
+coverage.*
+
+# Node and Angular (web UI)
+node_modules/
+/web/.angular/
+/web/dist/
+/web/coverage/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
