@@ -245,6 +245,7 @@ Rules:
 - Use YYYY-MM-DD for dates in tool calls. Convert relative dates such as "next Friday" from today's date.
 - If a required detail is missing, ask one short question.
 - Keep replies short and concrete. Mention amounts with their currency.
+- Write plain text. Do not use Markdown: no tables, no bold, no headings. For several items, use one short line for each item.
 `, today.Format("Monday, 2 January 2006"), today.Format(time.DateOnly), a.loc, a.currency)
 	if a.search != nil {
 		b.WriteString(`- Use web_search for public facts that change over time, such as official deadlines, provider policies, and prices. Never put the user's personal data in a query.
