@@ -25,7 +25,7 @@ const (
 	maxTitleRunes  = 200
 	maxQuoteRunes  = 300
 	maxProposals   = 20
-	extractTokens  = 4096
+	extractTokens  = 8192
 	sourceIngest   = "ingest"
 	kindText       = "text"
 	kindPDF        = "pdf"

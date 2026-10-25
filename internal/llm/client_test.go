@@ -396,3 +396,20 @@ func TestChatSendsJSONSchema(t *testing.T) {
 		t.Fatal("response_format must be omitted without a schema")
 	}
 }
+
+func TestChatRejectsTruncatedReply(t *testing.T) {
+	c, fake := newTestClient(t, func(int, chatRequest) (int, string) {
+		return 200, `{"model":"x","choices":[{"message":{"role":"assistant","content":"We need to produce"},"finish_reason":"length"}],"usage":{"prompt_tokens":10,"completion_tokens":900}}`
+	}, 0)
+
+	resp, err := c.Chat(context.Background(), Request{Tier: Ultra, Messages: []Message{User("x")}})
+	if !errors.Is(err, ErrTruncated) || resp != nil {
+		t.Fatalf("resp = %+v, err = %v, want ErrTruncated", resp, err)
+	}
+	if got := fake.models(); len(got) != 1 {
+		t.Fatalf("calls = %d, want 1", len(got))
+	}
+	if c.budget.spent == 0 {
+		t.Fatal("a truncated reply must still count against the budget")
+	}
+}

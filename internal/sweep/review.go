@@ -14,7 +14,7 @@ import (
 const (
 	reviewLookahead = 14
 	reviewStale     = 72 * time.Hour
-	reviewMaxTokens = 900
+	reviewMaxTokens = 8192
 	reviewPrompt    = `You write a short weekly review of one person's life admin. Use only the data in the user message. Never invent items, dates, or amounts.
 
 Write plain text for a chat message: no markdown, no tables, no headings. Use at most 180 words.

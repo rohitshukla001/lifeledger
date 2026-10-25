@@ -19,6 +19,8 @@ import (
 
 var ErrOutOfCredits = errors.New("llm: Token Factory account is out of credits")
 
+var ErrTruncated = errors.New("llm: the reply reached the token limit before it was complete")
+
 type APIError struct {
 	Status     int
 	Message    string
@@ -238,6 +240,9 @@ func (c *Client) complete(ctx context.Context, model string, req Request) (*Resp
 
 	cost := priceFor(model).cost(out.Usage)
 	c.budget.add(cost)
+	if out.Choices[0].FinishReason == "length" {
+		return nil, fmt.Errorf("%w (%s, %d completion tokens)", ErrTruncated, model, out.Usage.CompletionTokens)
+	}
 	return &Response{
 		Model:        model,
 		Message:      out.Choices[0].Message,

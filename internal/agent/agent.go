@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -20,7 +21,7 @@ const (
 	defaultMaxSteps     = 8
 	defaultHistoryLimit = 40
 	recallLimit         = 6
-	replyMaxTokens      = 2048
+	replyMaxTokens      = 8192
 	noAnswerReply       = "I could not finish that. Please try again with a little more detail."
 )
 
@@ -163,6 +164,13 @@ func (a *Agent) ReplyStream(ctx context.Context, conversationID int64, text stri
 		}
 
 		resp, err := a.llm.Chat(ctx, req)
+		if errors.Is(err, llm.ErrTruncated) {
+			a.log.Warn("model reply was cut off", "err", err)
+			msg := llm.Message{Role: "assistant", Content: noAnswerReply}
+			turn = append(turn, msg)
+			res.Reply = msg.Content
+			break
+		}
 		if err != nil {
 			return nil, err
 		}

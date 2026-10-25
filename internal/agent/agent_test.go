@@ -364,3 +364,16 @@ func TestReplyStreamEmitsToolEvents(t *testing.T) {
 		t.Fatalf("reply = %q", res.Reply)
 	}
 }
+
+func TestTruncatedReplyIsNotShown(t *testing.T) {
+	f := newFixture(t, func(llm.Request) (*llm.Response, error) { return nil, llm.ErrTruncated })
+
+	res := f.reply(t, "summarise everything")
+	if res.Reply != noAnswerReply {
+		t.Fatalf("reply = %q", res.Reply)
+	}
+	saved, _ := f.store.Messages(context.Background(), f.conv.ID)
+	if len(saved) != 2 || saved[1].Role != "assistant" || saved[1].Content != noAnswerReply {
+		t.Fatalf("saved = %+v", saved)
+	}
+}
