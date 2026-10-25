@@ -28,7 +28,7 @@ LifeLedger is an entry in the Personal AI track of the [Nebius x NVIDIA Global A
 - A web app (Angular) with seven views: Today, Chat (the agent's tool calls appear live), Ledger, Approvals, Import, Memory, and Activity. It works in light and dark mode and on a phone.
 - A JSON HTTP API for all features, protected by a bearer token. Chat can stream each tool call and the reply as server-sent events.
 - HTTP service with a health endpoint that also checks the database.
-- One container image (distroless, non-root) that runs on Nebius Serverless AI on a CPU-only VM. A GitHub Actions workflow tests each push and publishes the image.
+- One container image (distroless, non-root) that runs on a CPU-only host. The live demo runs on Render. Nebius Serverless AI is also supported. A GitHub Actions workflow tests each push and publishes the image.
 
 ## Architecture
 
@@ -226,7 +226,22 @@ Do not put API keys or passwords in the repository. Keep them in `.env`. Git ign
 | `make smoke URL=https://...` | Check a running server: health, web app, headers, token check, and API lists. Export `LIFELEDGER_API_TOKEN` first. Run `scripts/smoke.sh URL --chat` to also check one agent reply. |
 | `make help` | Show all targets. |
 
-To deploy LifeLedger on Nebius Serverless AI, follow [Deploy LifeLedger on Nebius Serverless](docs/deploy-nebius.md).
+### Deployment
+
+The live demo is at [lifeledger-u14p.onrender.com](https://lifeledger-u14p.onrender.com). It runs on the Render free plan from the image that CI publishes. Nemotron calls go to Nebius Token Factory. ADR 0011 gives the reasons for this setup.
+
+- After 15 minutes with no requests, the free plan stops the app. The next request starts it again in approximately one minute.
+- Each start removes the data. With `LIFELEDGER_SEED_DEMO=true`, the demo data comes back at each start.
+
+To deploy LifeLedger on a container host:
+
+1. Use the image `ghcr.io/rohitshukla001/lifeledger:latest`. It is built for `linux/amd64`.
+2. Send traffic to port 8080. On Render, set `PORT=8080`.
+3. Set `LIFELEDGER_API_TOKEN` and `NEBIUS_API_KEY`. Set the other variables in [Configuration](#configuration) as necessary.
+4. Set the health check path to `/healthz`.
+5. Run `scripts/smoke.sh <URL> --chat` to check the deployment.
+
+To deploy on Nebius Serverless AI, follow [Deploy LifeLedger on Nebius Serverless](docs/deploy-nebius.md). This needs a prepaid balance in Nebius AI Cloud.
 
 Binary commands:
 
@@ -283,7 +298,7 @@ internal/seed/      # Demo data with dates relative to today
 internal/version/   # Build version, set at build time
 web/                # Angular web app: core services, pages, shared components, unit tests
 docs/adr/           # Architecture decision records
-docs/               # API reference and the Nebius deployment runbook
+docs/               # ADRs, API reference, and the Nebius deployment runbook
 scripts/smoke.sh    # Smoke test for a running server
 Dockerfile          # Multi-stage image: web app, Go binary, distroless runtime
 .github/workflows/  # CI: Go and web checks, image publish to GitHub Container Registry
@@ -353,7 +368,7 @@ Dockerfile          # Multi-stage image: web app, Go binary, distroless runtime
 - [ADR 0008](docs/adr/0008-sweep-and-notifications.md): sweep, reminders, weekly review, and Telegram delivery.
 - [ADR 0009](docs/adr/0009-http-api.md): HTTP API, bearer token, and chat streaming.
 - [ADR 0010](docs/adr/0010-web-app.md): Angular web app.
-- [ADR 0011](docs/adr/0011-deployment.md): container image and Nebius Serverless deployment.
+- [ADR 0011](docs/adr/0011-deployment.md): container image, demo hosting on Render, and Nebius Serverless deployment.
 - [Deploy LifeLedger on Nebius Serverless](docs/deploy-nebius.md): step-by-step runbook.
 - [API reference](docs/api.md): endpoints, error format, and chat events.
 - [Token Factory documentation](https://docs.tokenfactory.nebius.com/quickstart).

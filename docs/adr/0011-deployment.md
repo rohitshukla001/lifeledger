@@ -1,6 +1,6 @@
 # ADR 0011: Container image and Nebius Serverless deployment
 
-- Status: Accepted
+- Status: Accepted, amended 2026-10-25
 - Date: 2026-10-21
 
 ## Context
@@ -27,3 +27,27 @@ The hackathon needs a public demo URL that stays live until judging ends. The ru
 - Personal data on the demo endpoint does not survive a restart. A deployment for daily use needs persistent storage. A Nebius shared filesystem mounted at `/data` is a candidate, but we did not test SQLite locking on it.
 - The endpoint runs all the time, so it costs compute hours until it is stopped. The daily model budget limits the Token Factory cost.
 - The distroless image has no shell. Use `nebius ai endpoint logs` to debug.
+
+## Amendment (2026-10-25): demo hosting on Render
+
+### Context
+
+Nebius AI Cloud asks for a prepaid balance before it creates resources. The free trial program stopped in July 2026. Without a balance, `nebius ai endpoint create` fails with `PermissionDenied`, and the console suspends AI Cloud resources. Token Factory works without that balance and uses the hackathon credits.
+
+The rules accept a project that makes a runtime call to the Token Factory inference API. A deployment on Nebius AI Cloud is one option, not a requirement. The rules require a live demo URL until judging ends.
+
+### Decision
+
+1. The live demo runs on the Render free plan, as a web service from the image `ghcr.io/rohitshukla001/lifeledger:latest`.
+2. All model calls go to Nebius Token Factory with NVIDIA Nemotron 3 models. This does not change.
+3. `PORT=8080` sends Render traffic to the server port. The health check path is `/healthz`.
+4. `LIFELEDGER_DAILY_BUDGET_USD=1` keeps the Token Factory cost inside the hackathon credits until judging ends.
+5. The Nebius Serverless runbook stays in the repository for users who have an AI Cloud balance.
+
+### Consequences
+
+- The demo costs nothing to host.
+- After 15 minutes with no requests, Render stops the app. The next request waits approximately one minute. The sweep does not run while the app is stopped.
+- Each start removes the data, and the demo data comes back. A judge's changes do not stay after the app stops.
+- Render does not deploy a new image automatically. After CI publishes an image, select **Manual Deploy > Deploy latest reference**.
+

@@ -7,6 +7,7 @@ This runbook deploys LifeLedger as a Nebius Serverless AI endpoint on a CPU-only
 You need:
 
 - A Nebius AI Cloud project with the `editor` role, and quota for one Compute VM and one VPC allocation.
+- A prepaid balance in Nebius AI Cloud. Without it, `nebius ai endpoint create` fails with `PermissionDenied`. Token Factory credits do not pay for AI Cloud compute.
 - The Nebius CLI. Install it with `curl -sSL https://artifacts.nebius.cloud/cli/install.sh | bash`, then run `exec -l $SHELL` and `nebius version`.
 - A CLI profile for the project: `nebius profile create`. Follow the prompts and select the project.
 - `jq`, for example `brew install jq` on macOS.
@@ -119,6 +120,7 @@ You cannot change the settings of an endpoint after you create it.
 
 | Problem | Cause | Solution |
 |---|---|---|
+| `nebius ai endpoint create` fails with `PermissionDenied` | AI Cloud has no prepaid balance, or the console shows that AI Cloud resources are suspended. | Top up the balance in **Billing**, or use a different container host (see the README). |
 | The state is `ERROR` with `NotEnoughResources` | No `cpu-d3` capacity in the region. | Delete the endpoint and create it again later, or use a different region. |
 | The state stays `IMAGE_PULLING`, then fails | Nebius cannot pull the image. | Make the GHCR package public, or use Container Registry in the same project. |
 | `exec format error` in the logs | The image is not `linux/amd64`. | Build with `make docker`, which sets `--platform linux/amd64`, or use the CI image. |
