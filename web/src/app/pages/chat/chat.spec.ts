@@ -3,11 +3,13 @@ import { Router, provideRouter } from '@angular/router';
 import { Subject, of } from 'rxjs';
 import { Api } from '../../core/api';
 import { ChatEvent } from '../../core/models';
+import { OverviewState } from '../../core/overview-state';
 import { Chat } from './chat';
 
 describe('Chat', () => {
   let events: Subject<ChatEvent>;
   let api: Record<string, ReturnType<typeof vi.fn>>;
+  let overview: { refresh: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     events = new Subject<ChatEvent>();
@@ -17,9 +19,14 @@ describe('Chat', () => {
       chat: vi.fn(() => events),
       deleteConversation: vi.fn(),
     };
+    overview = { refresh: vi.fn(), set: vi.fn() };
     TestBed.configureTestingModule({
       imports: [Chat],
-      providers: [provideRouter([]), { provide: Api, useValue: api }],
+      providers: [
+        provideRouter([]),
+        { provide: Api, useValue: api },
+        { provide: OverviewState, useValue: overview },
+      ],
     });
     vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
   });
@@ -78,6 +85,7 @@ describe('Chat', () => {
     expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/chat', 5], {
       replaceUrl: true,
     });
+    expect(overview.refresh).toHaveBeenCalledOnce();
   });
 
   it('shows an error from the stream', async () => {
