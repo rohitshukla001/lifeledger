@@ -6,6 +6,7 @@ import { dueTone, longDay, settleLabel, shortMonth } from '../../core/format';
 import { Notification, Obligation, Overview } from '../../core/models';
 import { Notices } from '../../core/notices';
 import { ObligationActions } from '../../core/obligation-actions';
+import { OverviewState } from '../../core/overview-state';
 import { AgoPipe, DuePipe, MoneyPipe } from '../../core/pipes';
 import { Stamp } from '../../shared/stamp';
 
@@ -20,6 +21,7 @@ export class Today {
   private readonly api = inject(Api);
   private readonly actions = inject(ObligationActions);
   private readonly notices = inject(Notices);
+  private readonly overviewState = inject(OverviewState);
 
   protected readonly overview = signal<Overview | null>(null);
   protected readonly notifications = signal<Notification[]>([]);
@@ -60,6 +62,7 @@ export class Today {
     }).subscribe({
       next: ({ overview, notifications }) => {
         this.overview.set(overview);
+        this.overviewState.set(overview);
         this.notifications.set(notifications);
         this.error.set(null);
       },

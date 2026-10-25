@@ -1,10 +1,9 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { filter, startWith, switchMap } from 'rxjs';
-import { Api } from '../core/api';
-import { Overview } from '../core/models';
+import { filter, fromEvent, merge, startWith } from 'rxjs';
 import { Notices } from '../core/notices';
+import { OverviewState } from '../core/overview-state';
 import { Session } from '../core/session';
 import { Icon } from '../shared/icon';
 
@@ -22,12 +21,11 @@ interface NavItem {
   styleUrl: './shell.css',
 })
 export class Shell {
-  private readonly api = inject(Api);
   private readonly session = inject(Session);
   private readonly router = inject(Router);
   protected readonly notices = inject(Notices);
 
-  protected readonly overview = signal<Overview | null>(null);
+  protected readonly overview = inject(OverviewState);
   protected readonly nav: NavItem[] = [
     { path: '/today', label: 'Today', icon: 'today' },
     { path: '/chat', label: 'Chat', icon: 'chat' },
@@ -39,18 +37,18 @@ export class Shell {
   ];
 
   constructor() {
-    this.router.events
-      .pipe(
-        filter((e) => e instanceof NavigationEnd),
-        startWith(null),
-        switchMap(() => this.api.overview()),
-        takeUntilDestroyed(inject(DestroyRef)),
-      )
-      .subscribe({ next: (o) => this.overview.set(o), error: () => this.overview.set(null) });
+    merge(
+      this.router.events.pipe(filter((e) => e instanceof NavigationEnd)),
+      fromEvent(document, 'visibilitychange').pipe(
+        filter(() => document.visibilityState === 'visible'),
+      ),
+    )
+      .pipe(startWith(null), takeUntilDestroyed(inject(DestroyRef)))
+      .subscribe(() => this.overview.refresh());
   }
 
   protected badge(path: string): number {
-    const o = this.overview();
+    const o = this.overview.value();
     if (!o) {
       return 0;
     }

@@ -21,7 +21,7 @@
       }
     </nav>
     <div class="foot">
-      @if (overview(); as o) {
+      @if (overview.value(); as o) {
         <p class="today mono">{{ o.today }}</p>
       }
       <button class="btn ghost small lock" type="button" (click)="lock()">Lock</button>

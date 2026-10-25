@@ -18,6 +18,7 @@ import { Api, errorMessage } from '../../core/api';
 import { Segment, linkify } from '../../core/format';
 import { ChatEvent, Conversation, Step } from '../../core/models';
 import { Notices } from '../../core/notices';
+import { OverviewState } from '../../core/overview-state';
 import { AgoPipe } from '../../core/pipes';
 import { AgentTurn, LiveStep, Turn, pretty, stepLabel, transcript } from '../../core/transcript';
 
@@ -39,6 +40,7 @@ export class Chat {
   private readonly api = inject(Api);
   private readonly router = inject(Router);
   private readonly notices = inject(Notices);
+  private readonly overviewState = inject(OverviewState);
   private readonly log = viewChild<ElementRef<HTMLElement>>('log');
 
   readonly id = input<string>();
@@ -118,6 +120,7 @@ export class Chat {
             : turn,
         );
         this.loadList();
+        this.overviewState.refresh();
       },
     });
   }
